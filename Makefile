@@ -21,6 +21,7 @@ test-runtime:
 	python3 scripts/check_hooks.py
 	python3 scripts/check_mcp.py
 	python3 scripts/test_check_activation.py
+	python3 scripts/test_macos_quarantine_bootstrap.py
 
 build-ui:
 	cd project-map-ui && npm run build
