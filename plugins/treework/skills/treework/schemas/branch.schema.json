@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TreeWork Branch State",
+  "type": "object",
+  "required": ["path", "parent", "status", "verification_status", "sync_status"],
+  "properties": {
+    "path": { "type": "string" },
+    "parent": { "type": "string" },
+    "title": { "type": "string" },
+    "purpose": { "type": "string" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "accepts": { "type": "array", "items": { "type": "string" } },
+        "excludes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "intake_rationale": { "type": "string" },
+    "status": { "enum": ["pending", "in_progress", "paused", "complete", "aborted"] },
+    "verification_status": { "enum": ["unverified", "partial", "verified", "failed"] },
+    "sync_status": { "enum": ["clean", "dirty", "stale"] },
+    "isolation": { "type": "object" },
+    "status_reason": { "type": "string" },
+    "last_sync": { "type": "string" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TreeWork Project State",
+  "type": "object",
+  "required": ["schema_version", "stage", "current_branch", "last_event_seq", "tree_revision", "tree_editing", "tree_hash", "last_sync"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "stage": { "enum": ["alignment", "build_tree", "work_tree"] },
+    "current_branch": { "type": "string" },
+    "last_event_seq": { "type": "integer", "minimum": 0 },
+    "tree_revision": { "type": "integer", "minimum": 0 },
+    "tree_editing": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["mode", "base_tree_revision", "base_event_seq", "base_state_hash", "opened_at"],
+          "properties": {
+            "mode": { "enum": ["start", "update"] },
+            "base_tree_revision": { "type": "integer", "minimum": 0 },
+            "base_event_seq": { "type": "integer", "minimum": 0 },
+            "base_state_hash": { "type": "string" },
+            "opened_at": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "tree_hash": { "type": "string" },
+    "last_sync": { "type": "string" }
+  },
+  "additionalProperties": false
+}

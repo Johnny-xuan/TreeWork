@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TreeWork Typed Event",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "seq",
+    "time",
+    "type",
+    "subject",
+    "message",
+    "tree_revision",
+    "data"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "time": { "type": "string", "pattern": "^unix:[0-9]+$" },
+    "type": {
+      "enum": [
+        "project.initialized",
+        "alignment.started",
+        "alignment.accepted",
+        "tree.editing_started",
+        "tree.editing_updated",
+        "tree.applied",
+        "branch.entered",
+        "branch.paused",
+        "branch.completed",
+        "branch.aborted",
+        "verification.recorded"
+      ]
+    },
+    "subject": { "type": "string" },
+    "message": { "type": "string" },
+    "tree_revision": { "type": "integer", "minimum": 0 },
+    "data": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "project.initialized" } } },
+      "then": { "properties": { "data": { "$ref": "#/$defs/projectInitialized" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "enum": ["alignment.started", "alignment.accepted"] }
+        }
+      },
+      "then": { "properties": { "data": { "$ref": "#/$defs/alignment" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "enum": ["tree.editing_started", "tree.editing_updated"] }
+        }
+      },
+      "then": { "properties": { "data": { "$ref": "#/$defs/treeEditing" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "tree.applied" } } },
+      "then": { "properties": { "data": { "$ref": "#/$defs/treeApplied" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "branch.entered" } } },
+      "then": { "properties": { "data": { "$ref": "#/$defs/branchEntered" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "enum": ["branch.paused", "branch.aborted"] }
+        }
+      },
+      "then": { "properties": { "data": { "$ref": "#/$defs/branchStatus" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "branch.completed" } } },
+      "then": { "properties": { "data": { "$ref": "#/$defs/branchCompleted" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "verification.recorded" } } },
+      "then": {
+        "properties": { "data": { "$ref": "#/$defs/verificationRecorded" } }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "stringTransition": {
+      "type": "object",
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "type": "string" },
+        "after": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "initialTransition": {
+      "type": "object",
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "type": ["string", "null"] },
+        "after": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "projectInitialized": {
+      "type": "object",
+      "required": ["stage", "current_branch", "snapshot_ref", "checkpoint_hash"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/initialTransition" },
+        "current_branch": { "$ref": "#/$defs/initialTransition" },
+        "snapshot_ref": { "type": "string" },
+        "checkpoint_hash": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "alignment": {
+      "type": "object",
+      "required": ["stage"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stringTransition" }
+      },
+      "additionalProperties": false
+    },
+    "treeEditing": {
+      "type": "object",
+      "required": ["stage", "editing"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stringTransition" },
+        "editing": {
+          "type": "object",
+          "required": [
+            "mode",
+            "base_tree_revision",
+            "base_event_seq",
+            "base_state_hash"
+          ],
+          "properties": {
+            "mode": { "enum": ["start", "update"] },
+            "base_tree_revision": { "type": "integer", "minimum": 0 },
+            "base_event_seq": { "type": "integer", "minimum": 1 },
+            "base_state_hash": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "treeOperation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "branch", "parent", "sibling_order"],
+          "properties": {
+            "kind": { "const": "create_branch" },
+            "branch": { "type": "string" },
+            "parent": { "type": "string" },
+            "sibling_order": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "branch", "from", "to"],
+          "properties": {
+            "kind": { "const": "move_branch" },
+            "branch": { "type": "string" },
+            "from": { "type": "string" },
+            "to": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "branch", "from", "to"],
+          "properties": {
+            "kind": { "const": "reorder_branch" },
+            "branch": { "type": "string" },
+            "from": { "type": "integer", "minimum": 0 },
+            "to": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "branch", "fields"],
+          "properties": {
+            "kind": { "const": "update_metadata" },
+            "branch": { "type": "string" },
+            "fields": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "branch", "depends_on"],
+          "properties": {
+            "kind": { "enum": ["add_dependency", "remove_dependency"] },
+            "branch": { "type": "string" },
+            "depends_on": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "treeApplied": {
+      "type": "object",
+      "required": [
+        "base",
+        "result",
+        "operations",
+        "affected_subjects",
+        "snapshot_ref",
+        "checkpoint_hash"
+      ],
+      "properties": {
+        "base": {
+          "type": "object",
+          "required": ["event_seq", "tree_revision", "state_hash"],
+          "properties": {
+            "event_seq": { "type": "integer", "minimum": 0 },
+            "tree_revision": { "type": "integer", "minimum": 0 },
+            "state_hash": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "required": [
+            "tree_revision",
+            "tree_document_hash",
+            "accepted_tree_state_hash",
+            "topology_changed"
+          ],
+          "properties": {
+            "tree_revision": { "type": "integer", "minimum": 0 },
+            "tree_document_hash": { "type": "string" },
+            "accepted_tree_state_hash": { "type": "string" },
+            "topology_changed": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "operations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/treeOperation" }
+        },
+        "affected_subjects": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "snapshot_ref": { "type": "string" },
+        "checkpoint_hash": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "branchEntered": {
+      "type": "object",
+      "required": ["current_branch", "status", "reason", "isolation"],
+      "properties": {
+        "current_branch": { "$ref": "#/$defs/stringTransition" },
+        "status": { "$ref": "#/$defs/stringTransition" },
+        "reason": { "$ref": "#/$defs/stringTransition" },
+        "isolation": {
+          "type": "object",
+          "required": [
+            "mode",
+            "workspace_path",
+            "git_branch",
+            "managed_by_treework",
+            "action"
+          ],
+          "properties": {
+            "mode": { "type": "string" },
+            "workspace_path": { "type": "string" },
+            "git_branch": { "type": "string" },
+            "managed_by_treework": { "type": "boolean" },
+            "action": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "branchStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": { "$ref": "#/$defs/stringTransition" },
+        "reason": { "$ref": "#/$defs/stringTransition" }
+      },
+      "additionalProperties": false
+    },
+    "branchCompleted": {
+      "type": "object",
+      "required": ["status", "reason", "verification"],
+      "properties": {
+        "status": { "$ref": "#/$defs/stringTransition" },
+        "reason": { "$ref": "#/$defs/stringTransition" },
+        "verification": {
+          "type": "object",
+          "required": ["status"],
+          "properties": { "status": { "type": "string" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "verificationRecorded": {
+      "type": "object",
+      "required": ["verification", "evidence"],
+      "properties": {
+        "verification": { "$ref": "#/$defs/stringTransition" },
+        "evidence": {
+          "type": "object",
+          "required": ["command", "result", "gap"],
+          "properties": {
+            "command": { "type": "string" },
+            "result": { "type": "string" },
+            "gap": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "treework": {
+      "command": "bash",
+      "args": [
+        "./scripts/start-mcp.sh"
+      ],
+      "cwd": "."
+    }
+  }
+}

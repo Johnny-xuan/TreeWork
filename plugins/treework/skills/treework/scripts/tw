@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+SRC_DIR="$PLUGIN_ROOT/crates/treework-cli/src"
+MANIFEST="$PLUGIN_ROOT/crates/treework-cli/Cargo.toml"
+BUILD_SCRIPT="$PLUGIN_ROOT/crates/treework-cli/build.rs"
+PLUGIN_MANIFEST="$PLUGIN_ROOT/.codex-plugin/plugin.json"
+if [[ -n "${TREEWORK_BUILD_DIR:-}" ]]; then
+  BUILD_DIR="$TREEWORK_BUILD_DIR"
+elif [[ -n "${PLUGIN_DATA:-}" ]]; then
+  BUILD_DIR="$PLUGIN_DATA/treework"
+else
+  BUILD_DIR="$PLUGIN_ROOT/target/treework"
+fi
+BIN="$BUILD_DIR/tw"
+BUILD_MANIFEST_STAMP="$BUILD_DIR/plugin-manifest.built.json"
+
+needs_build=0
+if [[ ! -x "$BIN" ]]; then
+  needs_build=1
+elif [[ ! -f "$BUILD_MANIFEST_STAMP" ]] || ! cmp -s "$PLUGIN_MANIFEST" "$BUILD_MANIFEST_STAMP"; then
+  needs_build=1
+else
+  while IFS= read -r file; do
+    if [[ "$file" -nt "$BIN" ]]; then
+      needs_build=1
+      break
+    fi
+  done < <(
+    find "$SRC_DIR" -type f -name '*.rs'
+    printf '%s\n' "$MANIFEST"
+    [[ -f "$BUILD_SCRIPT" ]] && printf '%s\n' "$BUILD_SCRIPT"
+    [[ -f "$PLUGIN_MANIFEST" ]] && printf '%s\n' "$PLUGIN_MANIFEST"
+    [[ -f "$PLUGIN_ROOT/Cargo.toml" ]] && printf '%s\n' "$PLUGIN_ROOT/Cargo.toml"
+    [[ -f "$PLUGIN_ROOT/Cargo.lock" ]] && printf '%s\n' "$PLUGIN_ROOT/Cargo.lock"
+  )
+fi
+
+if [[ "$needs_build" == "1" ]]; then
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "TreeWork requires cargo to build the Rust CLI with dependencies." >&2
+    exit 1
+  fi
+  mkdir -p "$BUILD_DIR"
+  CARGO_TARGET_DIR="$BUILD_DIR/cargo-target" cargo build --release --manifest-path "$MANIFEST" --bin tw >/dev/null
+  mkdir -p "$(dirname "$BIN")"
+  cp "$BUILD_DIR/cargo-target/release/tw" "$BIN"
+  cp "$PLUGIN_MANIFEST" "$BUILD_MANIFEST_STAMP"
+fi
+
+export TREEWORK_PLUGIN_ROOT="$PLUGIN_ROOT"
+exec "$BIN" "$@"

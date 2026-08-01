@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TreeWork Replay Checkpoint",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_seq",
+    "captured_at",
+    "tree_revision",
+    "checkpoint_hash",
+    "project",
+    "tree",
+    "branches"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_seq": { "type": "integer", "minimum": 1 },
+    "captured_at": { "type": "string", "pattern": "^unix:[0-9]+$" },
+    "tree_revision": { "type": "integer", "minimum": 0 },
+    "checkpoint_hash": { "type": "string" },
+    "project": {
+      "type": "object",
+      "required": ["stage", "current_branch", "tree_editing", "tree_hash"],
+      "properties": {
+        "stage": { "enum": ["alignment", "build_tree", "work_tree"] },
+        "current_branch": { "type": "string" },
+        "tree_editing": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": [
+                "mode",
+                "base_tree_revision",
+                "base_event_seq",
+                "base_state_hash",
+                "opened_at"
+              ],
+              "properties": {
+                "mode": { "enum": ["start", "update"] },
+                "base_tree_revision": { "type": "integer", "minimum": 0 },
+                "base_event_seq": { "type": "integer", "minimum": 1 },
+                "base_state_hash": { "type": "string" },
+                "opened_at": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "tree_hash": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "tree": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "tree-state.schema.json" }
+      ]
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "parent",
+          "title",
+          "purpose",
+          "status",
+          "verification_status",
+          "status_reason",
+          "isolation"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "parent": { "type": "string" },
+          "title": { "type": "string" },
+          "purpose": { "type": "string" },
+          "status": {
+            "enum": ["pending", "in_progress", "paused", "complete", "aborted"]
+          },
+          "verification_status": {
+            "enum": ["unverified", "partial", "verified", "failed"]
+          },
+          "status_reason": { "type": "string" },
+          "isolation": {
+            "type": "object",
+            "required": [
+              "mode",
+              "workspace_path",
+              "git_branch",
+              "managed_by_treework",
+              "last_status"
+            ],
+            "properties": {
+              "mode": { "type": "string" },
+              "workspace_path": { "type": "string" },
+              "git_branch": { "type": "string" },
+              "managed_by_treework": { "type": "boolean" },
+              "last_status": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

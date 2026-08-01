@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="24 24 464 464" role="img" aria-labelledby="title desc">
+  <title id="title">TreeWork tree</title>
+  <desc id="desc">A calm geometric tree with an organic canopy and a clear branching trunk.</desc>
+
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="#F3F0E8"/>
+
+  <path
+    d="M256 86
+       C207 86 170 120 166 170
+       C117 171 78 212 78 262
+       C78 317 122 361 177 361
+       C202 361 224 352 242 336
+       C262 355 289 365 318 362
+       C374 362 419 318 419 262
+       C419 212 381 173 333 170
+       C328 121 293 86 256 86
+       Z"
+    fill="#6D8E71"
+  />
+
+  <path
+    d="M235 421
+       C237 382 239 342 239 303
+       C239 282 246 269 256 269
+       C266 269 273 282 273 303
+       C273 342 275 382 277 421
+       Z"
+    fill="#29312B"
+  />
+
+  <path
+    d="M256 303 L202 248"
+    fill="none"
+    stroke="#29312B"
+    stroke-width="34"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M256 303 L256 211"
+    fill="none"
+    stroke="#29312B"
+    stroke-width="34"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M256 289 L313 233"
+    fill="none"
+    stroke="#29312B"
+    stroke-width="34"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

@@ -1,0 +1,446 @@
+
+\section{Formal Analysis}
+\label{sec:formal-analysis}
+
+This analysis characterizes how explicit project state affects
+project-continuation decisions.  Code quality remains an empirical question
+outside the scope of the formal results.  The main results connect
+action-relevant observation aliasing to unavoidable continuation error or
+evidence-recovery cost, then identify when an explicit state projection is
+sufficient to remove hidden coordination-state aliasing.  Transactional
+soundness ensures that the projection comes from one coherent committed state.
+
+\subsection{Observation Aliasing and Continuation Error}
+
+Our claims concern \emph{project-level continuation decisions} governed by the
+admissible transition relation $\Gamma$, rather than arbitrary local code edits.
+Let $\Omega$ be the set of project worlds.  Each $\omega\in\Omega$ induces a
+repository $X(\omega)$, a historical memory collection $H(\omega)$, and an
+accepted coordination state $z(\omega)\in\Z$.  For a fixed continuation
+query $q$, define the observation available under repository budget $\beta$ and
+retrieval depth $k$ as
+\begin{equation}
+\phi_{\beta,k}(q,\omega)
+=
+\Bigl(
+q,\,
+O_\beta(q,X(\omega)),\,
+R_k(q,H(\omega))
+\Bigr).
+\label{eq:observation-map}
+\end{equation}
+
+Let $\mathcal U_c$ be the set of project-level continuation actions, such as
+entering, pausing, aborting, or completing a branch.  Given
+$\Gamma\subseteq\mathcal Z\times\mathcal U_c\times\mathcal Z$, define the
+admissible continuation set
+\begin{equation}
+\operatorname{Adm}_\Gamma(z)
+=
+\left\{
+u\in\mathcal U_c:
+\exists z'\in\mathcal Z,\ (z,u,z')\in\Gamma
+\right\}.
+\label{eq:admissible-set}
+\end{equation}
+
+\begin{definition}[Decisive observation alias]
+Two project worlds $\omega_1,\omega_2$ are decisively aliased under
+$\phi_{\beta,k}$ for query $q$ if
+\begin{equation}
+\phi_{\beta,k}(q,\omega_1)
+=
+\phi_{\beta,k}(q,\omega_2)
+\label{eq:same-observation}
+\end{equation}
+while
+\begin{equation}
+\operatorname{Adm}_\Gamma(z(\omega_1))
+\cap
+\operatorname{Adm}_\Gamma(z(\omega_2))
+=
+\varnothing.
+\label{eq:disjoint-actions}
+\end{equation}
+Thus, the available evidence is identical even though no project-level
+continuation action is valid in both worlds.
+\end{definition}
+
+\begin{theorem}[Continuation error under decisive aliasing]
+\label{thm:aliasing-lower-bound}
+Let $\omega_1,\omega_2$ be decisively aliased, and let
+$\pi(\cdot\mid o)$ be any possibly randomized policy that chooses a continuation
+action using only the observation
+$o=\phi_{\beta,k}(q,\omega_i)$.  Under prior probabilities
+$p$ and $1-p$ for the two worlds, respectively,
+\begin{equation}
+\Pr[\textnormal{admissible continuation}]
+\le
+\max\{p,1-p\}.
+\label{eq:aliasing-success-bound}
+\end{equation}
+Equivalently,
+\begin{equation}
+\Pr[\textnormal{continuation error}]
+\ge
+\min\{p,1-p\}.
+\label{eq:aliasing-error-bound}
+\end{equation}
+In particular, under an equal prior, every observation-only policy has
+continuation error at least $1/2$ on the pair.
+\end{theorem}
+
+\begin{proof}
+Write
+$A_i=\operatorname{Adm}_\Gamma(z(\omega_i))$.
+Because the observations are identical, the policy uses the same distribution
+$\pi(\cdot\mid o)$ in both worlds.  Define
+$\pi(A\mid o)=\sum_{u\in A}\pi(u\mid o)$.  Its success probability is
+\begin{equation}
+p\,\pi(A_1\mid o)
++
+(1-p)\,\pi(A_2\mid o).
+\end{equation}
+Since $A_1\cap A_2=\varnothing$,
+$\pi(A_1\mid o)+\pi(A_2\mid o)\le 1$.  Therefore
+\begin{align}
+p\,\pi(A_1\mid o)
++
+(1-p)\,\pi(A_2\mid o)
+&\le
+\max\{p,1-p\}
+\bigl(
+\pi(A_1\mid o)+\pi(A_2\mid o)
+\bigr)\\
+&\le
+\max\{p,1-p\}.
+\end{align}
+Taking one minus both sides yields
+Equation~\eqref{eq:aliasing-error-bound}.
+\end{proof}
+
+\begin{corollary}[Repository-only non-identifiability]
+\label{cor:repository-nonidentifiability}
+Suppose two distinct development histories satisfy
+\begin{equation}
+\Psi(h,\alpha)=\Psi(h',\alpha')=X
+\end{equation}
+but induce disjoint admissible continuation sets.  Then any policy whose input is
+only a function of the repository snapshot $X$ is subject to
+Theorem~\ref{thm:aliasing-lower-bound}.
+\end{corollary}
+
+\begin{proof}
+Every code-only observation has the same value in the two worlds because the
+repository snapshot is identical.  The worlds are therefore decisively aliased,
+and Theorem~\ref{thm:aliasing-lower-bound} applies.
+\end{proof}
+
+\paragraph{A TreeWork witness.}
+The condition above can arise from branch-bound execution rather than from an
+artificial complete-versus-incomplete pair.  Let $b_1\neq b_2$ be two
+nonterminal branches, and let $q$ ask an agent to continue the branch assigned
+to its current bound workspace.  Consider two worlds with the same observed
+source tree and the same retrieved historical records, while the hidden
+worktree binding resolves the invocation to $b_1$ in $\omega_1$ and to $b_2$ in
+$\omega_2$.  Instantiate the query-specific continuation action set as
+\begin{equation}
+\mathcal U_c(q)=\{\operatorname{Enter}(b_1),\operatorname{Enter}(b_2)\}.
+\end{equation}
+TreeWork's binding guard rejects cross-branch entry, so the admissible sets are
+$\{\operatorname{Enter}(b_1)\}$ and $\{\operatorname{Enter}(b_2)\}$,
+respectively.  They are disjoint even though $\phi_{\beta,k}$ is identical when
+the binding is absent from the repository and retrieval observations.  This
+witness establishes realizability of decisive aliasing in the implemented
+coordination model; it does not assert a population frequency for such pairs.
+
+\subsection{Recovery Cost}
+
+An additional evidence-acquisition procedure may inspect more files, search Git
+history, retrieve more memories, run tools, or request human clarification.  We
+model $\sigma$ as a deterministic adaptive policy that maps its current
+transcript to either the next evidence request or $\operatorname{Stop}$.  Let
+$T_\sigma(\omega)$ be its terminal transcript in world $\omega$, and let
+$c_\sigma(\omega)\ge 0$ be the accumulated token, tool, time, or
+human-interaction cost in that world.  For a pair of worlds, define the minimum
+worst-case separation cost
+\begin{equation}
+C_{\mathrm{sep}}(\omega_1,\omega_2)
+=
+\inf_{\sigma:
+T_\sigma(\omega_1)\neq T_\sigma(\omega_2)}
+\max_{i\in\{1,2\}}c_\sigma(\omega_i),
+\label{eq:separation-cost}
+\end{equation}
+with $C_{\mathrm{sep}}=+\infty$ when no available procedure distinguishes the
+pair.
+
+\begin{theorem}[Error--recovery-cost dichotomy]
+\label{thm:error-or-cost}
+For a decisively aliased pair $\omega_1,\omega_2$, any deterministic adaptive
+continuation procedure that guarantees an admissible action in both worlds must
+incur worst-case additional evidence-acquisition cost at least
+$C_{\mathrm{sep}}(\omega_1,\omega_2)$.  If
+$C_{\mathrm{sep}}(\omega_1,\omega_2)=+\infty$, no zero-error continuation
+procedure exists.
+\end{theorem}
+
+\begin{proof}
+Suppose a procedure guarantees an admissible action in both worlds.  Its
+terminal transcripts must differ: identical transcripts cause the deterministic
+decision rule to choose the same action, which cannot belong to two disjoint
+admissible sets.  The procedure is therefore among those in the infimum in
+Equation~\eqref{eq:separation-cost}, and its worst-case cost is at least
+$C_{\mathrm{sep}}$.  If $C_{\mathrm{sep}}=+\infty$, no available procedure
+produces distinct terminal transcripts, so zero-error continuation is
+impossible.
+\end{proof}
+
+\subsection{Continuation Sufficiency of TreeWork}
+
+For each continuation action $u\in\mathcal U_c$, let
+\begin{equation}
+g_u(z)
+=
+\mathbf 1
+\left[
+u\in\operatorname{Adm}_\Gamma(z)
+\right]
+\end{equation}
+be its admissibility guard.
+
+\begin{definition}[Guard-complete projection]
+A projection $\Pi$ of maintained project memory is guard-complete for
+$\mathcal U_c$ if, for every $u\in\mathcal U_c$, there exists a deterministic
+function $\widetilde g_u$ such that
+\begin{equation}
+g_u(z(M))
+=
+\widetilde g_u(\Pi(M))
+\qquad
+\textnormal{for every committed project memory }M.
+\label{eq:guard-factorization}
+\end{equation}
+\end{definition}
+
+\begin{lemma}[Guard agreement from a guard-complete projection]
+\label{thm:continuation-sufficiency}
+If $\Pi$ is guard-complete for $\mathcal U_c$, then
+\begin{equation}
+\Pi(M)=\Pi(M')
+\quad\Longrightarrow\quad
+\operatorname{Adm}_\Gamma(z(M))
+=
+\operatorname{Adm}_\Gamma(z(M')).
+\label{eq:sufficient-projection}
+\end{equation}
+Equivalently, two states with different admissible continuation sets cannot
+share the same projection.
+\end{lemma}
+
+\begin{proof}
+Assume $\Pi(M)=\Pi(M')$.  For every $u\in\mathcal U_c$,
+Equation~\eqref{eq:guard-factorization} gives
+\begin{equation}
+g_u(z(M))
+=
+\widetilde g_u(\Pi(M))
+=
+\widetilde g_u(\Pi(M'))
+=
+g_u(z(M')).
+\end{equation}
+Thus exactly the same actions satisfy their guards in both states, which proves
+Equation~\eqref{eq:sufficient-projection}.
+\end{proof}
+
+This lemma records a representational consequence of guard completeness; it is
+not by itself a TreeWork-specific guarantee.  The substantive obligation is to
+show that a concrete projection contains every field consulted by the runtime
+guards.
+
+\begin{proposition}[TreeWork hard-guard projection is continuation-sufficient]
+\label{prop:treework-guard-complete}
+For the branch-lifecycle commands used during Work Tree, fix an invocation
+context $j$.  Let
+\begin{equation}
+\begin{aligned}
+\mathcal U_b=\{&\operatorname{Enter}(b),\operatorname{Pause}(b),\\
+                &\operatorname{Abort}(b),\operatorname{Complete}(b)\}.
+\end{aligned}
+\end{equation}
+Let $\operatorname{Targetable}_t(j,b)$ indicate that a branch-scoped command
+issued from $j$ resolves to $b$, and let
+$\operatorname{EnterSafe}_t(j,b)$ summarize the runtime's worktree-binding and
+isolation checks for entering $b$.  Define the hard-guard projection
+\begin{equation}
+\begin{aligned}
+\chi_t(b,j)
+=
+\Bigl(&\ell_t(b),v_t(b),
+  \operatorname{Targetable}_t(j,b),\\
+  &\operatorname{EnterSafe}_t(j,b),
+  \operatorname{AcceptanceDone}_t(b),\\
+  &\operatorname{StateConsistent}_t,
+  \operatorname{WorkspaceSafe}_t(b)\Bigr).
+\end{aligned}
+\label{eq:coordination-projection}
+\end{equation}
+Assume the environment predicates report exactly the checks performed by the
+runtime at transaction time.  Then $\chi_t(b,j)$ is guard-complete for the
+hard lifecycle and completion guards over $\mathcal U_b$.
+\end{proposition}
+
+\begin{proof}
+The guard for $\operatorname{Enter}(b)$ depends on a nonterminal lifecycle and
+the invocation and isolation checks summarized by
+$\operatorname{Targetable}_t(j,b)$ and $\operatorname{EnterSafe}_t(j,b)$.
+The guards for $\operatorname{Pause}(b)$ and $\operatorname{Abort}(b)$ depend on
+target resolution and lifecycle.  The guard for
+$\operatorname{Complete}(b)$ additionally depends on
+$\operatorname{AcceptanceDone}_t(b)$, $v_t(b)$,
+$\operatorname{StateConsistent}_t$, and
+$\operatorname{WorkspaceSafe}_t(b)$.  Every hard guard therefore factors
+through $\chi_t(b,j)$, so
+Lemma~\ref{thm:continuation-sufficiency} applies.
+\end{proof}
+
+Table~\ref{tab:runtime-correspondence} maps the predicates in $\chi_t$ to the
+runtime mechanisms and regression evidence used by the implementation.  The
+proposition remains conditional on those mechanisms reporting the checks
+performed at transaction time.
+
+The runtime serializes an Agent-visible Recall interface containing the
+machine-derived allowed-action set, blocked actions with reason codes, and a
+publication marker $m_t=(r_t,e_t,h_t)$ containing the Tree revision, event
+sequence, and accepted Tree hash.  Let $D_{\mathrm{allow}}$ decode the serialized
+allowed-action list.
+
+\begin{proposition}[Recall interface correspondence]
+\label{prop:recall-interface-correspondence}
+Assume Recall eligibility and lifecycle commands evaluate the hard guards in
+Proposition~\ref{prop:treework-guard-complete} over the same committed state and
+invocation context.  Then, at read time,
+\begin{equation}
+D_{\mathrm{allow}}
+\bigl(\operatorname{RecallAPI}_t(b,j)\bigr)
+=
+\operatorname{Adm}_\Gamma(z(M_t))\cap\mathcal U_b.
+\label{eq:recall-interface-correspondence}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Recall partitions every action in $\mathcal U_b$ into allowed or blocked using
+the same lifecycle, targetability, acceptance, verification, consistency, and
+workspace predicates represented by $\chi_t(b,j)$.  The decoder selects exactly
+the allowed partition.  Guard completeness therefore makes that partition
+equal to the admissible lifecycle actions at the committed read state.
+\end{proof}
+
+This equality is revision-scoped: a lifecycle command re-evaluates its guards
+before publication rather than treating an earlier Recall result as a durable
+capability.
+
+The complete branch work context also contains the structural neighborhood,
+advisory dependency readiness, and branch-owned artifacts:
+\begin{equation}
+\Pi_b^{\mathrm{work}}(M_t,j)
+=
+\Bigl(
+  \operatorname{RecallAPI}_t(b,j),\,
+  N_t(b),\,
+  \operatorname{Ready}_t(b),\,
+  S_t(b),P_t(b),R_t(b),F_t(b),V_t(b)
+\Bigr).
+\label{eq:work-context-projection}
+\end{equation}
+Dependency readiness is deliberately advisory in the implemented system: it
+guides branch choice but is not a hidden scheduler or a hard entry guard.  The
+formal sufficiency claim concerns the declared project-level transaction guards
+under $\Gamma$; readiness and the additional artifacts ground planning and
+local implementation but do not guarantee code quality.
+
+\begin{corollary}[Elimination of coordination-state aliasing]
+\label{cor:no-coordination-aliasing}
+For committed TreeWork states satisfying the assumptions of
+Proposition~\ref{prop:treework-guard-complete}, two branch states with disjoint
+admissible movement sets must produce different coordination projections
+$\chi_t(b,j)$ and different decoded Recall eligibility.  Hence the
+decisive-aliasing lower bound of
+Theorem~\ref{thm:aliasing-lower-bound} does not arise from hidden
+machine-owned coordination state once the matching committed Recall projection
+is supplied.
+\end{corollary}
+
+\begin{corollary}[Cross-agent continuation agreement]
+\label{cor:handoff-agreement}
+If two agents with arbitrary private contexts read the same committed
+Recall projection for the same invocation context, then they decode the same
+admissible project-level continuation set for branch $b$.  They may still choose
+different admissible actions or produce different code.
+\end{corollary}
+
+\subsection{Committed-State and Completion Soundness}
+
+Let $\mathcal I(M)$ collect the structural and publication invariants of a
+project memory, including one root, unique branch identifiers, a valid hierarchy,
+an acyclic dependency graph, revision consistency, and event-tail consistency.
+
+\begin{theorem}[Conditional committed-state soundness under marker-consistent publication]
+\label{thm:committed-state-soundness}
+Assume (i) $\mathcal I(M_0)$; (ii) for every successful transaction $\tau$ from
+$M$ to $M'$, either $M'$ is explicitly validated against $\mathcal I$, or
+$\tau$ is invariant-preserving,
+\begin{equation}
+\mathcal I(M)\land\operatorname{Guard}_\tau(M)
+\Longrightarrow
+\mathcal I(M');
+\label{eq:invariant-preserving-transition}
+\end{equation}
+(iii) every interrupted or failed publication recovers either by restoring the
+previous committed state and event tail or by finishing a complete intended
+state that satisfies condition (ii); and (iv) marker-last publication defines
+the logical commit point, while readers accept only marker-consistent tuples.
+Then every accepted read is derived from one complete committed state $M_t$
+satisfying $\mathcal I(M_t)$.
+\end{theorem}
+
+\begin{proof}
+By induction on the committed transaction sequence, every committed state
+satisfies $\mathcal I$: the base state does by assumption; rollback restores
+the preceding committed state; finish-forward publishes the complete intended
+state; an explicitly validated transaction publishes a state satisfying
+$\mathcal I$; and an invariant-preserving transaction carries $\mathcal I$
+forward under its guard.  Marker-last publication and marker-consistent reads
+prevent an accepted reader from combining components belonging to different
+logical commits.  Therefore every accepted read corresponds to one complete
+committed state satisfying $\mathcal I$.
+\end{proof}
+
+This theorem is a conditional system invariant rather than an unconditional
+claim about arbitrary files on disk.  The validation, journal, publication, and
+coherent-read assumptions are connected to implementation mechanisms and tests
+in Table~\ref{tab:runtime-correspondence}.
+
+\begin{corollary}[Completion soundness]
+\label{cor:completion-soundness}
+If a committed transaction changes branch $b$ to
+$\ell_{t+1}(b)=\textnormal{complete}$ only when
+\begin{equation}
+\operatorname{AcceptanceDone}_t(b)
+\land
+[v_t(b)=\textnormal{verified}]
+\land
+\operatorname{StateConsistent}_t
+\land
+\operatorname{WorkspaceSafe}_t(b),
+\end{equation}
+then every accepted completion satisfies all four declared completion
+conditions at commit time.
+\end{corollary}
+
+\begin{proof}
+The completion guard is evaluated before the committed lifecycle transition;
+the premise requires every accepted transition to satisfy all four conjuncts.
+\end{proof}

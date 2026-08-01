@@ -1,0 +1,48 @@
+{
+  "name": "treework",
+  "version": "0.1.3",
+  "description": "State-native project memory for long-running coding agents.",
+  "author": {
+    "name": "Zhongxuan Song",
+    "url": "https://github.com/Johnny-xuan"
+  },
+  "homepage": "https://github.com/Johnny-xuan/TreeWork",
+  "repository": "https://github.com/Johnny-xuan/TreeWork",
+  "license": "MIT",
+  "keywords": [
+    "treework",
+    "agentic-development",
+    "state-native-memory",
+    "project-state",
+    "trajectory-engineering",
+    "project-map",
+    "rust"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "TreeWork",
+    "shortDescription": "State-native project memory for long-running coding agents.",
+    "longDescription": "TreeWork is a Codex plugin that turns accepted project intent, design, structure, branch reality, and verification into recoverable state. Its three-stage protocol guides coding agents through Alignment, declarative Tree construction, and one verified branch at a time. Durable transitions, branch-local documents, Recall, Project Map, and Replay keep long-running work aligned with project reality.",
+    "developerName": "Zhongxuan Song",
+    "category": "Developer Tools",
+    "websiteURL": "https://github.com/Johnny-xuan/TreeWork",
+    "brandColor": "#B8472A",
+    "composerIcon": "./assets/treework-icon.png",
+    "logo": "./assets/treework-icon.png",
+    "capabilities": [
+      "Pre-Tree Alignment",
+      "Spec-first technical design",
+      "Declarative Build Tree",
+      "Work Tree",
+      "Branch Transition Protocol",
+      "Live branch recall",
+      "Protected state transactions",
+      "Read-only Project Map"
+    ],
+    "defaultPrompt": [
+      "Use TreeWork to align this project, design its Specs and Tree, then traverse from the control workspace into one isolated branch at a time.",
+      "Recall the current TreeWork branch and continue from its Spec, Plan, and recorded reality.",
+      "Open this project's read-only TreeWork Project Map."
+    ]
+  }
+}

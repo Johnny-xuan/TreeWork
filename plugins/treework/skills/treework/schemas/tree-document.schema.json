@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://treework.local/schemas/tree-document.schema.json",
+  "title": "TreeWork Declarative Tree Document",
+  "type": "object",
+  "required": ["version", "tree"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "tree": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/node"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "root"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "branchId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "title", "purpose"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/branchId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "spec": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.md$"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/branchId"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

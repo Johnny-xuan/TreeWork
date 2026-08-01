@@ -1,0 +1,18 @@
+flowchart LR
+  subgraph domains[Domain-specific state memories]
+    code["Coding state<br/>Tree, Spec, verification"]
+    gui["GUI state<br/>Page, form, permissions"]
+    research["Research state<br/>Hypotheses, evidence"]
+    embodied["Embodied state<br/>Objects, affordances"]
+  end
+
+  request["Task + environment<br/>phase + query"] --> router["State-memory router"]
+  code --> router
+  gui --> router
+  research --> router
+  embodied --> router
+
+  router --> composition["Routed state composition"]
+  observation["Environment observation"] --> context["Agent context"]
+  composition --> context
+  retrieval["Retrieved history"] --> context

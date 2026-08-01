@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a change to the shared TreeWork workflow or product.
+title: "[Proposal] "
+labels: ["proposal"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Workflow problem
+      description: Describe the concrete Agent or user problem before proposing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: How does TreeWork handle this situation today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+      description: Explain the behavior, state, or interaction you think should change.
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Complexity and alternatives
+      description: What new commands, state, migration, or Agent burden would this introduce?

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "renderer": "strata-v3-svg",
+  "fixture": {
+    "nodes": 751,
+    "dependencies": 2250,
+    "deep_levels": 40,
+    "wide_siblings": 560,
+    "replay_nodes": 31,
+    "replay_transactions_minimum": 85
+  },
+  "calibration": {
+    "method": "p95-nearest-rank",
+    "runs": 3,
+    "multiplier": 4,
+    "note": "Ceilings are the calibrated floor values from the source baseline and intentionally allow cold shared CI machines."
+  },
+  "ceilings_ms": {
+    "initial_render": 8000,
+    "map_to_dependency": 4000,
+    "dependency_focus": 3000,
+    "dependency_depth_expand": 3000,
+    "dependency_to_map": 3000,
+    "map_search": 2000,
+    "map_collapse": 2000,
+    "map_focus": 2000,
+    "map_pan": 1000,
+    "map_zoom": 1000,
+    "map_to_replay": 5000,
+    "replay_seek": 4000
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "TreeWork"
+  short_description: "Traverse a project Tree through isolated, Spec-led branches"
+  default_prompt: "Use $treework to align the project, design its Specs and Tree, then traverse from the control workspace into one isolated branch at a time until the Tree is complete."

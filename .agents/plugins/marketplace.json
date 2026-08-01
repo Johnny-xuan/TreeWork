@@ -1,0 +1,20 @@
+{
+  "name": "treework",
+  "interface": {
+    "displayName": "TreeWork"
+  },
+  "plugins": [
+    {
+      "name": "treework",
+      "source": {
+        "source": "local",
+        "path": "./plugins/treework"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

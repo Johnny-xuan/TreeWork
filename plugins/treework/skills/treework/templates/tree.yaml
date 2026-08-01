@@ -1,0 +1,7 @@
+version: 1
+
+tree:
+  id: root
+  title: Project
+  purpose: Project-wide coordination and integration.
+  spec: spec.md
