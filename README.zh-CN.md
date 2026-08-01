@@ -2,7 +2,9 @@
   <img src="plugins/treework/assets/treework-icon.png" width="128" alt="TreeWork 图标">
   <p>
     <a href="README.md">English</a> |
-    <a href="README.zh-CN.md">简体中文</a>
+    <a href="README.zh-CN.md">简体中文</a> |
+    <a href="https://johnny-xuan.github.io/TreeWork/">网页版论文</a> |
+    <a href="https://github.com/Johnny-xuan/TreeWork/releases/download/v0.1.4/TreeWork-paper-draft-v0.1.4.pdf">PDF</a>
   </p>
 </div>
 
@@ -181,7 +183,8 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 - 在 branch 之间做状态转移，而不是直接跳转；
 - 用 Acceptance 与 Verification 证明完成。
 
-形式化模型和评估设计位于[论文草稿](paper/README.md)。
+你可以在[网页版论文](https://johnny-xuan.github.io/TreeWork/)中阅读形式化模型和
+评估设计；论文源码与构建方式见 [`paper/`](paper/README.md)。
 
 ## 插件内容
 

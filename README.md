@@ -2,7 +2,9 @@
   <img src="plugins/treework/assets/treework-icon.png" width="128" alt="TreeWork logo">
   <p>
     <a href="README.md">English</a> |
-    <a href="README.zh-CN.md">Chinese</a>
+    <a href="README.zh-CN.md">Chinese</a> |
+    <a href="https://johnny-xuan.github.io/TreeWork/">Web Paper</a> |
+    <a href="https://github.com/Johnny-xuan/TreeWork/releases/download/v0.1.4/TreeWork-paper-draft-v0.1.4.pdf">PDF</a>
   </p>
 </div>
 
@@ -196,8 +198,9 @@ The resulting mental shift is concise:
 - transition between branches instead of jumping;
 - demonstrate completion through Acceptance and Verification.
 
-The formal model and evaluation design live in the
-[paper draft](paper/README.md).
+Read the formal model and evaluation design in the
+[Web Paper](https://johnny-xuan.github.io/TreeWork/), or see the
+[paper source and build instructions](paper/README.md).
 
 ## Package Contents
 
