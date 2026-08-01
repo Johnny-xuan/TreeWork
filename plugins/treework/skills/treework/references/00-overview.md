@@ -1,10 +1,10 @@
 # TreeWork Overview
 
-TreeWork is a state-native project memory plugin that gives an Agent project
-space sense. Code and tests remain implementation truth; TreeWork preserves the
-accepted organization, design, branch-local reality, verification, and
-semantic development trajectory around that implementation. The project has
-two connected structures:
+TreeWork is a tree-guided development plugin that gives an Agent a durable
+sense of project space. Code and tests remain implementation truth; TreeWork
+preserves the accepted organization, design, branch-local reality,
+verification, and semantic development trajectory around that implementation.
+The project has two connected structures:
 
 - The Project Tree defines scope hierarchy.
 - The graph defines execution relationships.
