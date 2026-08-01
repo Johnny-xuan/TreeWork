@@ -1,5 +1,16 @@
 # Release Notes
 
+## v0.1.5 - macOS Quarantine-Safe Bootstrap
+
+- Prevents macOS Gatekeeper from terminating Cargo-generated executable build
+  helpers when TreeWork is installed from a quarantined download.
+- Removes quarantine only from TreeWork-owned executable Rust outputs and the
+  final CLI binary; it does not disable Gatekeeper or alter unrelated files.
+- Preserves existing `RUSTC_WRAPPER` configuration and leaves non-macOS
+  bootstrap behavior unchanged.
+- Adds deterministic Darwin/Linux bootstrap coverage, package validation for
+  the shipped helper, and a real quarantined-copy macOS verification path.
+
 ## v0.1.4 - Release Verification
 
 - Makes the declarative Tree regression fixture independent of Markdown

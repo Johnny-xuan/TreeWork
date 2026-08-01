@@ -78,15 +78,42 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
             #!/usr/bin/env bash
             printf 'rustc:%s\\n' "$*" >> "$TREEWORK_TEST_LOG"
             output=''
+            out_dir=''
+            crate_name=''
+            crate_type=''
+            extra_filename=''
             while [[ "$#" -gt 0 ]]; do
               case "$1" in
+                --crate-name)
+                  crate_name="$2"
+                  shift 2
+                  ;;
+                --crate-type)
+                  crate_type="$2"
+                  shift 2
+                  ;;
+                --out-dir)
+                  out_dir="$2"
+                  shift 2
+                  ;;
                 -o)
                   output="$2"
+                  shift 2
+                  ;;
+                -C)
+                  case "$2" in
+                    extra-filename=*) extra_filename="${2#extra-filename=}" ;;
+                  esac
                   shift 2
                   ;;
                 *) shift ;;
               esac
             done
+            if [[ -z "$output" && "$crate_type" == "proc-macro" ]]; then
+              output="$out_dir/lib$crate_name$extra_filename.dylib"
+            elif [[ -z "$output" && "$crate_type" == "bin" ]]; then
+              output="$out_dir/$crate_name$extra_filename"
+            fi
             if [[ -z "$output" ]]; then
               printf 'rustc fixture\\n'
               exit 0
@@ -111,13 +138,19 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
             printf 'cargo-wrapper:%s\\n' "${RUSTC_WRAPPER:-}" >> "$TREEWORK_TEST_LOG"
             printf 'cargo-inner:%s\\n' "${TREEWORK_INNER_RUSTC_WRAPPER:-}" >> "$TREEWORK_TEST_LOG"
             out="$CARGO_TARGET_DIR/release/build/fixture"
-            mkdir -p "$out" "$CARGO_TARGET_DIR/release"
+            deps="$CARGO_TARGET_DIR/release/deps"
+            mkdir -p "$out" "$deps" "$CARGO_TARGET_DIR/release"
             "$RUSTC_WRAPPER" "$TREEWORK_FAKE_RUSTC" -vV >/dev/null
             "$RUSTC_WRAPPER" "$TREEWORK_FAKE_RUSTC" \\
               --crate-name build_script_build \\
               --crate-type bin \\
               --out-dir "$out" \\
               -o "$out/build_script_build"
+            "$RUSTC_WRAPPER" "$TREEWORK_FAKE_RUSTC" \\
+              --crate-name fixture_macros \\
+              --crate-type proc-macro \\
+              -C extra-filename=-abc123 \\
+              --out-dir "$deps"
             printf '#!/usr/bin/env bash\\nprintf "tw fixture\\n"\\n' > "$CARGO_TARGET_DIR/release/tw"
             chmod +x "$CARGO_TARGET_DIR/release/tw"
             """,
@@ -154,13 +187,29 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "tw fixture")
         calls = self.log.read_text(encoding="utf-8")
         helper = self.plugin / "scripts" / "rustc-unquarantine.sh"
-        output_dir = self.build / "cargo-target" / "release" / "build" / "fixture"
+        output = (
+            self.build
+            / "cargo-target"
+            / "release"
+            / "build"
+            / "fixture"
+            / "build_script_build"
+        )
+        proc_macro = (
+            self.build
+            / "cargo-target"
+            / "release"
+            / "deps"
+            / "libfixture_macros-abc123.dylib"
+        )
         self.assertIn(f"cargo-wrapper:{helper}", calls)
         self.assertIn(
             f"cargo-inner:{self.fake_bin / 'inner-rustc-wrapper'}", calls
         )
         self.assertIn("inner:", calls)
-        self.assertIn(f"xattr:-dr com.apple.quarantine {output_dir}", calls)
+        self.assertIn(f"xattr:-d com.apple.quarantine {output}", calls)
+        self.assertIn(f"xattr:-d com.apple.quarantine {proc_macro}", calls)
+        self.assertNotIn("xattr:-dr", calls)
         self.assertIn(
             f"xattr:-d com.apple.quarantine {self.build / 'tw'}", calls
         )
