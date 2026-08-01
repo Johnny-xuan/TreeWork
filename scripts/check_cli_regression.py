@@ -1019,9 +1019,17 @@ tree:
     )
     run(workspace, build_dir, "tree", "apply")
     alpha_plan_path = tw_dir / "branches" / "alpha" / "task_plan.md"
-    alpha_plan = alpha_plan_path.read_text(encoding="utf-8").replace(
-        "## Scope (owned work and boundary; not progress notes or implementation history)\n\n- ",
-        "## Scope (owned work and boundary; not progress notes or implementation history)\n\n- Hand-authored scope.",
+    scope_marker = (
+        "## Scope (owned work and boundary; not progress notes or implementation history)"
+        "\n\n-"
+    )
+    alpha_plan = alpha_plan_path.read_text(encoding="utf-8")
+    if scope_marker not in alpha_plan:
+        fail("branch task plan fixture is missing the Scope placeholder")
+    alpha_plan = alpha_plan.replace(
+        scope_marker,
+        f"{scope_marker} Hand-authored scope.",
+        1,
     )
     alpha_plan_path.write_text(alpha_plan, encoding="utf-8")
 

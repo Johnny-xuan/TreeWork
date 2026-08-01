@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.1.4 - Release Verification
+
+- Makes the declarative Tree regression fixture independent of Markdown
+  placeholder trailing whitespace, so the public Linux CI validates the same
+  normalized templates shipped by the plugin.
+- Keeps the TreeWork `v0.1.3` product behavior unchanged while publishing a
+  fully green release candidate.
+
 ## v0.1.3 - Public Repository Release
 
 - Publishes TreeWork as a Codex plugin for state-native project memory while
