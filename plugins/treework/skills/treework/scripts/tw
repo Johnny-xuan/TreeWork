@@ -82,10 +82,25 @@ if [[ "$needs_build" == "1" ]]; then
   mkdir -p "$BUILD_DIR"
   CARGO_TARGET_DIR="$BUILD_DIR/cargo-target" cargo build --release --manifest-path "$MANIFEST" --bin tw >/dev/null
   mkdir -p "$(dirname "$BIN")"
-  cp "$BUILD_DIR/cargo-target/release/tw" "$BIN"
+  PUBLISH_TMP="$(mktemp "$BUILD_DIR/.tw.publish.XXXXXX")"
+  cleanup_publish_tmp() {
+    if [[ -n "${PUBLISH_TMP:-}" && -e "$PUBLISH_TMP" ]]; then
+      rm -f "$PUBLISH_TMP"
+    fi
+  }
+  trap cleanup_publish_tmp EXIT
+  cp "$BUILD_DIR/cargo-target/release/tw" "$PUBLISH_TMP"
+  chmod 0755 "$PUBLISH_TMP"
   if [[ "$build_os" == "Darwin" ]]; then
-    clear_quarantine_if_present "$BIN"
+    clear_quarantine_if_present "$PUBLISH_TMP"
+    # Launch the fresh path before publication. Gatekeeper can retain a denied
+    # decision for an older destination path even after its bytes are replaced.
+    # Preflighting the new filesystem object verifies it before the atomic move.
+    "$PUBLISH_TMP" version >/dev/null
   fi
+  mv -f "$PUBLISH_TMP" "$BIN"
+  PUBLISH_TMP=""
+  trap - EXIT
   cp "$PLUGIN_MANIFEST" "$BUILD_MANIFEST_STAMP"
 fi
 

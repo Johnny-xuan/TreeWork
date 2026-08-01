@@ -151,7 +151,12 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
               --crate-type proc-macro \\
               -C extra-filename=-abc123 \\
               --out-dir "$deps"
-            printf '#!/usr/bin/env bash\\nprintf "tw fixture\\n"\\n' > "$CARGO_TARGET_DIR/release/tw"
+            {
+              printf '%s\\n' \
+                '#!/usr/bin/env bash' \
+                'printf "candidate:%s\\n" "$*" >> "$TREEWORK_TEST_LOG"' \
+                'printf "tw fixture\\n"'
+            } > "$CARGO_TARGET_DIR/release/tw"
             chmod +x "$CARGO_TARGET_DIR/release/tw"
             """,
         )
@@ -211,8 +216,30 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
         self.assertIn(f"xattr:-d com.apple.quarantine {proc_macro}", calls)
         self.assertNotIn("xattr:-dr", calls)
         self.assertIn(
-            f"xattr:-d com.apple.quarantine {self.build / 'tw'}", calls
+            "xattr:-d com.apple.quarantine "
+            f"{self.build / '.tw.publish.'}",
+            calls,
         )
+        self.assertEqual(calls.count("candidate:version"), 2)
+
+    def test_upgrade_atomically_replaces_existing_cli(self) -> None:
+        self.build.mkdir(parents=True)
+        existing = self.build / "tw"
+        write_executable(
+            existing,
+            """
+            #!/usr/bin/env bash
+            printf 'stale fixture\\n'
+            """,
+        )
+        previous_inode = existing.stat().st_ino
+
+        result = self.run_wrapper()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "tw fixture")
+        self.assertNotEqual(existing.stat().st_ino, previous_inode)
+        self.assertFalse(list(self.build.glob(".tw.publish.*")))
 
     def test_non_darwin_keeps_existing_wrapper(self) -> None:
         result = self.run_wrapper(uname="Linux")
@@ -222,6 +249,7 @@ class MacOSQuarantineBootstrapTests(unittest.TestCase):
             f"cargo-wrapper:{self.fake_bin / 'inner-rustc-wrapper'}", calls
         )
         self.assertNotIn("xattr:", calls)
+        self.assertEqual(calls.count("candidate:version"), 1)
 
 
 if __name__ == "__main__":
