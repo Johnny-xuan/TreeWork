@@ -164,6 +164,9 @@ def check_treework_cli() -> None:
     tw = PLUGIN_ROOT / "skills" / "treework" / "scripts" / "tw"
     if not tw.exists():
         fail("missing skills/treework/scripts/tw")
+    rustc_wrapper = PLUGIN_ROOT / "scripts" / "rustc-unquarantine.sh"
+    if not rustc_wrapper.is_file() or not os.access(rustc_wrapper, os.X_OK):
+        fail("scripts/rustc-unquarantine.sh must exist and be executable")
     manifest = load_json(PLUGIN_ROOT / ".codex-plugin" / "plugin.json")
     expected = f"tw {manifest['version']}"
     env = os.environ.copy()

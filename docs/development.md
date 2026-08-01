@@ -18,6 +18,11 @@ python3 scripts/check_project_map_read_model.py
 The `tw` wrapper builds into `$TREEWORK_BUILD_DIR`, Codex plugin data storage, or
 the plugin-local `target/treework` fallback.
 
+On macOS, the wrapper removes `com.apple.quarantine` only from TreeWork's newly
+compiled Rust outputs and final CLI binary. This allows a plugin downloaded from
+the internet to complete its first-run Cargo build without disabling Gatekeeper
+or changing unrelated files. Existing `RUSTC_WRAPPER` configuration is chained.
+
 ## Project Map
 
 ```bash

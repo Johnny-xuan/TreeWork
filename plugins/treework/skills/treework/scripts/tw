@@ -7,6 +7,7 @@ SRC_DIR="$PLUGIN_ROOT/crates/treework-cli/src"
 MANIFEST="$PLUGIN_ROOT/crates/treework-cli/Cargo.toml"
 BUILD_SCRIPT="$PLUGIN_ROOT/crates/treework-cli/build.rs"
 PLUGIN_MANIFEST="$PLUGIN_ROOT/.codex-plugin/plugin.json"
+RUSTC_UNQUARANTINE_WRAPPER="$PLUGIN_ROOT/scripts/rustc-unquarantine.sh"
 if [[ -n "${TREEWORK_BUILD_DIR:-}" ]]; then
   BUILD_DIR="$TREEWORK_BUILD_DIR"
 elif [[ -n "${PLUGIN_DATA:-}" ]]; then
@@ -43,10 +44,48 @@ if [[ "$needs_build" == "1" ]]; then
     echo "TreeWork requires cargo to build the Rust CLI with dependencies." >&2
     exit 1
   fi
+
+  build_os="$(uname -s)"
+  if [[ "$build_os" == "Darwin" ]]; then
+    if [[ ! -x "$RUSTC_UNQUARANTINE_WRAPPER" ]]; then
+      echo "TreeWork macOS bootstrap helper is missing or not executable: $RUSTC_UNQUARANTINE_WRAPPER" >&2
+      exit 1
+    fi
+    if [[ -z "${TREEWORK_XATTR_BIN:-}" ]]; then
+      TREEWORK_XATTR_BIN="$(command -v xattr || true)"
+    fi
+    if [[ -z "$TREEWORK_XATTR_BIN" ]]; then
+      echo "TreeWork requires xattr to prepare downloaded Rust build artifacts on macOS." >&2
+      exit 1
+    fi
+
+    clear_quarantine_if_present() {
+      local target="$1"
+      if "$TREEWORK_XATTR_BIN" -p com.apple.quarantine "$target" >/dev/null 2>&1; then
+        "$TREEWORK_XATTR_BIN" -d com.apple.quarantine "$target"
+      fi
+    }
+
+    # Shell scripts can run from a downloaded plugin even while generated Mach-O
+    # helpers are blocked. Ensure Cargo can launch this wrapper, then chain any
+    # wrapper already configured by the user (for example sccache).
+    clear_quarantine_if_present "$RUSTC_UNQUARANTINE_WRAPPER"
+    if [[ -n "${RUSTC_WRAPPER:-}" && "$RUSTC_WRAPPER" != "$RUSTC_UNQUARANTINE_WRAPPER" ]]; then
+      export TREEWORK_INNER_RUSTC_WRAPPER="$RUSTC_WRAPPER"
+    else
+      unset TREEWORK_INNER_RUSTC_WRAPPER
+    fi
+    export TREEWORK_XATTR_BIN
+    export RUSTC_WRAPPER="$RUSTC_UNQUARANTINE_WRAPPER"
+  fi
+
   mkdir -p "$BUILD_DIR"
   CARGO_TARGET_DIR="$BUILD_DIR/cargo-target" cargo build --release --manifest-path "$MANIFEST" --bin tw >/dev/null
   mkdir -p "$(dirname "$BIN")"
   cp "$BUILD_DIR/cargo-target/release/tw" "$BIN"
+  if [[ "$build_os" == "Darwin" ]]; then
+    clear_quarantine_if_present "$BIN"
+  fi
   cp "$PLUGIN_MANIFEST" "$BUILD_MANIFEST_STAMP"
 fi
 
