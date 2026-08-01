@@ -3,7 +3,7 @@
   <p>
     <a href="README.md">English</a> |
     <a href="README.zh-CN.md">Chinese</a> |
-    <a href="https://johnny-xuan.github.io/TreeWork/">Web Paper</a> |
+    <a href="https://johnny-xuan.github.io/TreeWork/"><img src="web-paper/public/web-paper-icon.svg" width="17" alt=""> Web Paper</a> |
     <a href="https://github.com/Johnny-xuan/TreeWork/releases/download/v0.1.4/TreeWork-paper-draft-v0.1.4.pdf">PDF</a>
   </p>
 </div>

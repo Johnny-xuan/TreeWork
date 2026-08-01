@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">TreeWork Web Paper</title>
+  <desc id="desc">An open paper carrying the TreeWork branching mark.</desc>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="#F3F0E8" stroke="#D4CDBD" stroke-width="4"/>
+  <path d="M23 34c16-5 29-2 41 7v54c-12-9-25-12-41-7V34Z" fill="#FBFAF6" stroke="#29312B" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M105 34c-16-5-29-2-41 7v54c12-9 25-12 41-7V34Z" fill="#FBFAF6" stroke="#29312B" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M64 42v51" fill="none" stroke="#29312B" stroke-width="6" stroke-linecap="round"/>
+  <path d="M64 72 48 57M64 68l16-16" fill="none" stroke="#6D8E71" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="48" cy="57" r="5" fill="#6D8E71"/>
+  <circle cx="80" cy="52" r="5" fill="#6D8E71"/>
+</svg>
