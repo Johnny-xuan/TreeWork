@@ -1,0 +1,749 @@
+
+<header id="title-block-header">
+<h1 class="title"><span class="smallcaps">TreeWork</span>: State-Native Project Memory for Long-Horizon Coding Agents</h1>
+<p class="author">Zhongxuan Song<br>
+University of Science and Technology of China<br>
+<code>universeszym@mail.ustc.edu.cn</code><br>
+<a href="https://github.com/Johnny-xuan/TreeWork"><span style="color: black">&nbsp;<code>Code</code></span></a></p>
+</header><section class="abstract" aria-labelledby="abstract"><h1 id="abstract">Abstract<a class="heading-anchor" href="#abstract" aria-label="Link to this section">#</a></h1><p>Long-horizon coding agents lose operational coordination state across context compression, interruptions, task switching, and handoffs between agents. Most external agent-memory systems are retrieval-native: they store textual facts, episodes, reflections, or trajectories and later retrieve a small set of items relevant to a query. Coding agents can also inspect the repository, but a finite context budget permits only a partial view of a large codebase, and source code primarily records implementation outcomes rather than the accepted intent and process that produced them. Retrieval and code inspection are both necessary, but machine-owned coordination state is a different object. Continuing software work requires a complete and current account of fields such as which branch owns a request, which dependencies are satisfied, and what verification is still missing, together with governed references to the accepted design. TreeWork treats the structured fields as authoritative; it does not assume that narrative artifacts are automatically complete or correct.</p>
+<p>We present TreeWork, a state-native project memory system for coding agents. TreeWork represents a project as an ordered rooted Project Tree augmented by a dependency DAG, branch-local Specs and execution documents, machine-owned lifecycle state, verification evidence, and a compact event trajectory of accepted state transitions. Rather than reconstructing state from semantically similar fragments, TreeWork exposes deterministic projections for branch recall, current project visualization, and trajectory replay. Its three-stage protocol—Pre-Tree Alignment, Build Tree, and Work Tree—separates intent formation, state-space construction, and branch-local execution. A transaction layer validates structural and lifecycle changes and publishes them through a marker-defined logical commit, while Git worktrees isolate branch execution.</p>
+<p>We formalize the observation–state reconstruction gap, the TreeWork machine-state model, its admissible transition relation, and its query projections. We prove a continuation-error lower bound for decisively aliased observations and give conditional sufficiency and soundness guarantees for guard-complete projections and marker-consistent committed reads. We also describe the implemented system and specify an evaluation protocol for measuring state-recovery accuracy, trajectory drift, handoff cost, development quality, and workflow overhead. Accordingly, this paper focuses on the system design, formal properties, and a reproducible protocol for controlled evaluation.</p>
+</section>
+<h1 data-number="1" id="introduction"><span class="header-section-number">1</span> Introduction<a class="heading-anchor" href="#introduction" aria-label="Link to this section">#</a></h1>
+<p>Coding agents increasingly navigate repositories, edit files, execute tools, and verify changes rather than merely generate isolated code snippets <span class="citation" data-cites="yang2024sweagent jimenez2023swebench">(<a href="#ref-yang2024sweagent" role="doc-biblioref" data-paper-link="true">Yang et al. 2024</a>; <a href="#ref-jimenez2023swebench" role="doc-biblioref" data-paper-link="true">Jimenez et al. 2023</a>)</span>. Their work is therefore sequential and stateful. A meaningful project may span many modules, design decisions, interrupted sessions, context-window compressions, and human or multi-agent handoffs. At each continuation point, the acting agent must know not only what was said in the past, but where the project currently is.</p>
+<p>Repository inspection is indispensable for grounding an agent in implementation reality. Source files, tests, and existing documentation reveal what the system currently does. They do not, however, provide a cheap or unique inverse of the development process. A large repository can only be sampled under a finite context budget; several design histories may yield similar code; and source code does not reliably identify which requirements were accepted, which alternatives were rejected, whether a module is complete or merely paused, or which evidence is still required. Git preserves physical change history, but diffs do not by themselves encode the accepted semantic trajectory of the project.</p>
+<p>External memory is a common response to context limits. Representative systems store observations or reflections and retrieve relevant items for future reasoning <span class="citation" data-cites="park2023generative shinn2023reflexion">(<a href="#ref-park2023generative" role="doc-biblioref" data-paper-link="true">Park et al. 2023</a>; <a href="#ref-shinn2023reflexion" role="doc-biblioref" data-paper-link="true">Shinn et al. 2023</a>)</span>; others manage memory tiers <span class="citation" data-cites="packer2023memgpt">(<a href="#ref-packer2023memgpt" role="doc-biblioref" data-paper-link="true">Packer et al. 2023</a>)</span>, build linked note networks <span class="citation" data-cites="xu2025amem">(<a href="#ref-xu2025amem" role="doc-biblioref" data-paper-link="true">Xu et al. 2025</a>)</span>, or evolve reusable contexts <span class="citation" data-cites="zhang2025ace">(<a href="#ref-zhang2025ace" role="doc-biblioref" data-paper-link="true">Zhang et al. 2025</a>)</span>. These approaches make valuable past information available, but they generally frame reading as a relevance problem: given a query, which stored fragments should enter the next context?</p>
+<p>Project continuation poses a stricter problem. Suppose an agent retrieves one old statement that branch <span class="math inline">\(b\)</span> is blocked, one newer note that its dependency was completed, and a design discussion that was later superseded. All three items may be semantically relevant. None alone identifies the authoritative current state. A top-<span class="math inline">\(k\)</span> retriever may omit a necessary dependency, return a stale decision, or present conflicting memories without an update rule. Recent work has independently found a gap between retrieving updated evidence and acting on the resulting state <span class="citation" data-cites="chao2026stale">(<a href="#ref-chao2026stale" role="doc-biblioref" data-paper-link="true">Chao et al. 2026</a>)</span>. More generally, surveys of agent memory identify contradiction handling, continual consolidation, and causally grounded retrieval as open problems <span class="citation" data-cites="du2026memory">(<a href="#ref-du2026memory" role="doc-biblioref" data-paper-link="true">Du 2026</a>)</span>.</p>
+<p>We call this mismatch the <em>observation–state reconstruction gap</em>. The problem is neither repository inspection nor retrieval itself. The problem is asking an agent to reconstruct authoritative current state from a partial view of implementation outcomes plus semantically relevant historical fragments. For project continuation, code inspection should remain the source of implementation truth, while coordination state should be an exact projection of maintained machine-owned project state. Semantic retrieval can remain supplementary.</p>
+<p><span class="smallcaps">TreeWork</span> addresses this gap for long-horizon software development. It externalizes persistent project memory in which:</p>
+<ul>
+<li><p>a rooted tree defines hierarchical work ownership;</p></li>
+<li><p>a dependency DAG constrains feasible ordering and parallelism;</p></li>
+<li><p>project- and branch-scoped Specs preserve technical design formed before coding;</p></li>
+<li><p>Plans, Progress, Findings, and Verification records separate intended work, current reality, learned conclusions, and completion evidence;</p></li>
+<li><p>lifecycle transactions maintain branch position and status;</p></li>
+<li><p>a compact semantic event stream preserves the accepted development trajectory; and</p></li>
+<li><p>deterministic read models let agents and humans recover the same accepted coordination state.</p></li>
+</ul>
+<p><span class="smallcaps">TreeWork</span> is not a fixed workflow engine and does not execute or schedule agents. A fixed workflow typically provides a policy or prescribed control flow over steps. <span class="smallcaps">TreeWork</span> instead defines a shared state space and an admissible transition relation. The agent retains freedom over local implementation and branch choice, subject to explicit ownership, design, dependency, verification, and transition constraints. In this sense, the system supports <em>trajectory engineering</em>: it makes the path of long-running development explicit, recoverable, and inspectable without prescribing every action.</p>
+<figure id="fig:memory-comparison">
+<img src="__TREEWORK_PAPER_ASSET__/two_panel_agent_workflow_comparison_4k_final.png" alt="Repository inspection and memory retrieval expose implementation outcomes and historical fragments, but leave the agent to reconstruct current coordination state. TreeWork retains targeted code inspection and optional retrieval while exposing accepted coordination state through a deterministic projection." loading="lazy" decoding="async" width="4096" height="2048"><figcaption aria-hidden="true">Repository inspection and memory retrieval expose implementation outcomes and historical fragments, but leave the agent to reconstruct current coordination state. TreeWork retains targeted code inspection and optional retrieval while exposing accepted coordination state through a deterministic projection.</figcaption>
+</figure>
+<p>Our contributions are:</p>
+<ol>
+<li><p>We formulate the observation–state reconstruction gap for long-horizon coding work and distinguish partial repository inspection plus relevance-oriented recall from authoritative project-state recovery.</p></li>
+<li><p>We define state-native project memory as a composition of accepted structured state, scope-owned documents, semantic transition events, and deterministic query projections.</p></li>
+<li><p>We introduce the <span class="smallcaps">TreeWork</span> methodology: a three-stage development protocol over an ordered Project Tree and dependency DAG, with specification-first branches, protected lifecycle transitions, and verification-gated completion.</p></li>
+<li><p>We prove a continuation-error lower bound under decisively aliased observations and establish conditional sufficiency and committed-state soundness results for explicit coordination projections.</p></li>
+<li><p>We describe a working implementation as a coding-agent plugin with a Rust transaction runtime, Git worktree isolation, branch recall, and read-only Map, Dependency, and Replay views.</p></li>
+<li><p>We provide a reproducible evaluation protocol for measuring state recovery, trajectory drift, handoff cost, development quality, and workflow overhead.</p></li>
+</ol>
+<h1 data-number="2" id="related-work"><span class="header-section-number">2</span> Related Work<a class="heading-anchor" href="#related-work" aria-label="Link to this section">#</a></h1>
+<h2 data-number="2.1" id="retrieval-augmented-and-agent-memory"><span class="header-section-number">2.1</span> Retrieval-Augmented and Agent Memory<a class="heading-anchor" href="#retrieval-augmented-and-agent-memory" aria-label="Link to this section">#</a></h2>
+<p>Retrieval-augmented generation combines parametric generation with retrieved external evidence <span class="citation" data-cites="lewis2020rag">(<a href="#ref-lewis2020rag" role="doc-biblioref" data-paper-link="true">Lewis et al. 2020</a>)</span>. Memory-augmented language agents further distinguish working context from semantic, episodic, or procedural memory <span class="citation" data-cites="sumers2023coala du2026memory">(<a href="#ref-sumers2023coala" role="doc-biblioref" data-paper-link="true">Sumers et al. 2023</a>; <a href="#ref-du2026memory" role="doc-biblioref" data-paper-link="true">Du 2026</a>)</span>. Generative Agents retrieve experiences and reflections <span class="citation" data-cites="park2023generative">(<a href="#ref-park2023generative" role="doc-biblioref" data-paper-link="true">Park et al. 2023</a>)</span>; Reflexion retains verbal feedback across trials <span class="citation" data-cites="shinn2023reflexion">(<a href="#ref-shinn2023reflexion" role="doc-biblioref" data-paper-link="true">Shinn et al. 2023</a>)</span>; MemGPT manages hierarchical memory tiers <span class="citation" data-cites="packer2023memgpt">(<a href="#ref-packer2023memgpt" role="doc-biblioref" data-paper-link="true">Packer et al. 2023</a>)</span>; A-MEM evolves linked notes <span class="citation" data-cites="xu2025amem">(<a href="#ref-xu2025amem" role="doc-biblioref" data-paper-link="true">Xu et al. 2025</a>)</span>; and ACE curates an evolving context playbook <span class="citation" data-cites="zhang2025ace">(<a href="#ref-zhang2025ace" role="doc-biblioref" data-paper-link="true">Zhang et al. 2025</a>)</span>.</p>
+<p>These systems preserve knowledge, experience, and reusable strategy. <span class="smallcaps">TreeWork</span> defines a different read contract: not which historical items are relevant to a query, but which operational state is currently accepted for a named branch. Retrieval remains complementary evidence; it does not by itself provide authority, supersession, or a deterministic current-state projection.</p>
+<h2 data-number="2.2" id="stateful-workflows-and-formal-transition-systems"><span class="header-section-number">2.2</span> Stateful Workflows and Formal Transition Systems<a class="heading-anchor" href="#stateful-workflows-and-formal-transition-systems" aria-label="Link to this section">#</a></h2>
+<p>ReAct interleaves reasoning and actions <span class="citation" data-cites="yao2023react">(<a href="#ref-yao2023react" role="doc-biblioref" data-paper-link="true">Yao et al. 2023</a>)</span>, while StateFlow uses state-driven workflows to ground task execution <span class="citation" data-cites="wu2024stateflow">(<a href="#ref-wu2024stateflow" role="doc-biblioref" data-paper-link="true">Y. Wu et al. 2024</a>)</span>. Earlier systems traditions already supply the formal machinery that TreeWork uses: Statecharts model hierarchical and concurrent state <span class="citation" data-cites="harel1987statecharts">(<a href="#ref-harel1987statecharts" role="doc-biblioref" data-paper-link="true">Harel 1987</a>)</span>; TLA+ specifies behavioral properties of discrete systems <span class="citation" data-cites="lamport2002specifying">(<a href="#ref-lamport2002specifying" role="doc-biblioref" data-paper-link="true">Lamport 2002</a>)</span>; linearizability formalizes the appearance of atomic concurrent operations <span class="citation" data-cites="herlihy1990linearizability">(<a href="#ref-herlihy1990linearizability" role="doc-biblioref" data-paper-link="true">Herlihy and Wing 1990</a>)</span>; and transaction processing develops atomic commit, logging, and recovery <span class="citation" data-cites="gray1992transaction">(<a href="#ref-gray1992transaction" role="doc-biblioref" data-paper-link="true">Gray and Reuter 1992</a>)</span>. TreeWork applies these established mechanisms to durable coding-project state and asks an additional question: which projected fields are sufficient to determine admissible continuation movements?</p>
+<p>Agent trajectories are also studied as first-class analysis objects. In software engineering, thought–action–result trajectories expose recurring motifs, costs, and failures <span class="citation" data-cites="bouzenia2025trajectories">(<a href="#ref-bouzenia2025trajectories" role="doc-biblioref" data-paper-link="true">Bouzenia and Pradel 2025</a>)</span>. TreeWork stores a coarser semantic trajectory containing accepted project transitions rather than private reasoning, raw shell history, or source diffs. Its state persists across tasks and agents without selecting the next tool call or executing an LLM workflow graph.</p>
+<h2 data-number="2.3" id="event-sourced-state-provenance-and-decision-records"><span class="header-section-number">2.3</span> Event-Sourced State, Provenance, and Decision Records<a class="heading-anchor" href="#event-sourced-state-provenance-and-decision-records" aria-label="Link to this section">#</a></h2>
+<p>Event Sourcing represents application changes as an event sequence that can explain or reconstruct state <span class="citation" data-cites="fowler2005eventsourcing">(<a href="#ref-fowler2005eventsourcing" role="doc-biblioref" data-paper-link="true">Fowler 2005</a>)</span>. W3C PROV models entities, activities, agents, and derivation for provenance interchange <span class="citation" data-cites="lebo2013provo">(<a href="#ref-lebo2013provo" role="doc-biblioref" data-paper-link="true">Lebo, Sahoo, and McGuinness 2013</a>)</span>. Architecture Decision Records preserve decision context, status, consequences, and supersession <span class="citation" data-cites="nygard2011adr">(<a href="#ref-nygard2011adr" role="doc-biblioref" data-paper-link="true">Nygard 2011</a>)</span>. These traditions cover complementary questions: what happened, how an artifact was produced, and why a design was accepted.</p>
+<p>TreeWork combines a narrower typed event trajectory with branch-local design and current lifecycle state to answer what a branch permits now. It is not a pure event-sourced read model: current Project Map and Recall projections read materialized committed state, while events and checkpoints support historical Replay. Git remains the source of file-level provenance.</p>
+<h2 data-number="2.4" id="software-project-coordination-and-acceptance-infrastructure"><span class="header-section-number">2.4</span> Software Project Coordination and Acceptance Infrastructure<a class="heading-anchor" href="#software-project-coordination-and-acceptance-infrastructure" aria-label="Link to this section">#</a></h2>
+<p>Production software platforms already maintain substantial authoritative coordination state. GitHub Issues supports nested work and blocking dependencies <span class="citation" data-cites="github2026issues">(<a href="#ref-github2026issues" role="doc-biblioref" data-paper-link="true">GitHub 2026a</a>)</span>; protected branches can require reviews, status checks, resolved conversations, successful deployments, and merge queues <span class="citation" data-cites="github2026protected">(<a href="#ref-github2026protected" role="doc-biblioref" data-paper-link="true">GitHub 2026b</a>)</span>. Modern code review likewise combines technical inspection with a social acceptance process <span class="citation" data-cites="sadowski2018review">(<a href="#ref-sadowski2018review" role="doc-biblioref" data-paper-link="true">Sadowski et al. 2018</a>)</span>.</p>
+<p>Work hierarchies, dependencies, and completion gates are established coordination mechanisms, but their state is often distributed across issues, pull requests, CI, documents, and Git. TreeWork organizes the subset needed to continue coding as a branch-scoped contract connecting accepted design, lifecycle, verification, deterministic reads, and guarded writes.</p>
+<h2 data-number="2.5" id="multi-agent-coordination-and-shared-state"><span class="header-section-number">2.5</span> Multi-Agent Coordination and Shared State<a class="heading-anchor" href="#multi-agent-coordination-and-shared-state" aria-label="Link to this section">#</a></h2>
+<p>Blackboard architectures established shared external state as a coordination medium for heterogeneous knowledge sources <span class="citation" data-cites="hayesroth1985blackboard">(<a href="#ref-hayesroth1985blackboard" role="doc-biblioref" data-paper-link="true">Hayes-Roth 1985</a>)</span>. Contemporary LLM systems explore complementary message- and workflow-oriented coordination: AutoGen centers programmable multi-agent conversation <span class="citation" data-cites="wu2023autogen">(<a href="#ref-wu2023autogen" role="doc-biblioref" data-paper-link="true">Q. Wu et al. 2023</a>)</span>; MetaGPT encodes roles and standard operating procedures <span class="citation" data-cites="hong2023metagpt">(<a href="#ref-hong2023metagpt" role="doc-biblioref" data-paper-link="true">Hong et al. 2023</a>)</span>; and ChatDev structures software development through communicative agents and chat chains <span class="citation" data-cites="qian2024chatdev">(<a href="#ref-qian2024chatdev" role="doc-biblioref" data-paper-link="true">Qian et al. 2024</a>)</span>.</p>
+<p>TreeWork does not replace inter-agent communication, allocate workers, or run a team. It supplies shared committed domain state so that handoffs need not retransmit project location, accepted design, lifecycle, and completion evidence only through messages. Coordination through shared state and coordination through communication remain complementary.</p>
+<h2 data-number="2.6" id="agent-interfaces-and-domain-specific-state-systems"><span class="header-section-number">2.6</span> Agent Interfaces and Domain-Specific State Systems<a class="heading-anchor" href="#agent-interfaces-and-domain-specific-state-systems" aria-label="Link to this section">#</a></h2>
+<p>SWE-bench exposes the difficulty of repository-level issue resolution <span class="citation" data-cites="jimenez2023swebench">(<a href="#ref-jimenez2023swebench" role="doc-biblioref" data-paper-link="true">Jimenez et al. 2023</a>)</span>, and SWE-agent demonstrates that an agent-computer interface materially changes coding-agent behavior <span class="citation" data-cites="yang2024sweagent">(<a href="#ref-yang2024sweagent" role="doc-biblioref" data-paper-link="true">Yang et al. 2024</a>)</span>. TreeWork extends this interface perspective from code manipulation to recovery of project coordination state.</p>
+<p>Other agent domains reinforce that action-relevant state is domain-specific. WebArena and OSWorld define reproducible web and desktop environments with task-specific initial state and executable outcomes <span class="citation" data-cites="zhou2023webarena xie2024osworld">(<a href="#ref-zhou2023webarena" role="doc-biblioref" data-paper-link="true">Zhou et al. 2023</a>; <a href="#ref-xie2024osworld" role="doc-biblioref" data-paper-link="true">Xie et al. 2024</a>)</span>; Voyager combines embodied exploration, environment feedback, and a growing skill library <span class="citation" data-cites="wang2023voyager">(<a href="#ref-wang2023voyager" role="doc-biblioref" data-paper-link="true">Wang et al. 2023</a>)</span>; and The AI Scientist spans idea formation, experiments, artifacts, and review <span class="citation" data-cites="lu2024aiscientist">(<a href="#ref-lu2024aiscientist" role="doc-biblioref" data-paper-link="true">Lu et al. 2024</a>)</span>. These are not interchangeable state-memory systems. They motivate the broader view that coding, GUI, embodied, and research agents require different state schemas connected by common projection interfaces.</p>
+<p>Across these traditions, the components of TreeWork are individually familiar. Its system contribution is their combination into a coding-agent-facing, branch-scoped deterministic continuation projection, linked to authority and supersession, admissible movements, transactional writes, and agent-independent handoff.</p>
+<h1 data-number="3" id="sec:problem"><span class="header-section-number">3</span> Problem Formulation<a class="heading-anchor" href="#sec:problem" aria-label="Link to this section">#</a></h1>
+<h2 data-number="3.1" id="partial-repository-observation-and-retrieval"><span class="header-section-number">3.1</span> Partial Repository Observation and Retrieval<a class="heading-anchor" href="#partial-repository-observation-and-retrieval" aria-label="Link to this section">#</a></h2>
+<p>Let <span class="math inline">\(X_t\)</span> be the complete repository snapshot at time <span class="math inline">\(t\)</span>, let <span class="math inline">\(H_t=\{m_1,\ldots,m_n\}\)</span> be available memory items, and let <span class="math inline">\(q_t\)</span> be a query derived from the agent’s current context. Under a context budget <span class="math inline">\(\beta\)</span>, an agent obtains a local repository observation</p>
+<p id="eq:repository-observation" class="equation-block"><span class="math display">\[O_\beta(q_t,X_t)\subseteq X_t.\]</span><a class="equation-number" href="#eq:repository-observation" aria-label="Equation 1" data-paper-link="true">(1)</a></p>
+<p>It may also retrieve semantically relevant memory:</p>
+<p id="eq:retrieval" class="equation-block"><span class="math display">\[R_k(q_t,H_t)
+  =
+  \operatorname{TopK}_{m\in H_t}\; \operatorname{sim}(q_t,m),\]</span><a class="equation-number" href="#eq:retrieval" aria-label="Equation 2" data-paper-link="true">(2)</a></p>
+<p>followed by a model-dependent reconstruction</p>
+<p id="eq:reconstruction" class="equation-block"><span class="math display">\[\widehat{z}_t
+  =
+  f_\theta\!\left(
+    q_t,
+    O_\beta(q_t,X_t),
+    R_k(q_t,H_t)
+  \right),\]</span><a class="equation-number" href="#eq:reconstruction" aria-label="Equation 3" data-paper-link="true">(3)</a></p>
+<p>where <span class="math inline">\(z_t\)</span> denotes the operational state required to continue work. Repository tools select files relevant to the current query, while Equation&nbsp;<a href="#eq:retrieval" data-reference-type="ref" data-reference="eq:retrieval" data-paper-link="true">(2)</a> optimizes memory relevance. Neither operation directly optimizes global state validity. Without additional machinery, their combination provides no guarantee that the reconstructed state is:</p>
+<ul>
+<li><p><em>complete</em>: all required dependencies and constraints are present;</p></li>
+<li><p><em>current</em>: superseded facts are excluded;</p></li>
+<li><p><em>authoritative</em>: conflicts are resolved according to an accepted write path;</p></li>
+<li><p><em>causally situated</em>: the reasons and transitions leading to the current state are preserved; or</p></li>
+<li><p><em>actionable</em>: the next admissible project movement is identifiable.</p></li>
+</ul>
+<p>For a state-distance function <span class="math inline">\(d\)</span>, define the reconstruction error as</p>
+<p id="eq:state-gap" class="equation-block"><span class="math display">\[\Delta_t = d(\widehat{z}_t,z_t).\]</span><a class="equation-number" href="#eq:state-gap" aria-label="Equation 4" data-paper-link="true">(4)</a></p>
+<p>Increasing <span class="math inline">\(k\)</span> or the context window may reduce omission, but it does not by itself define supersession, authority, lifecycle, or admissible transitions.</p>
+<p>There is also an information problem independent of context size. Let <span class="math inline">\(h_t=(Q_t,S_t,\widetilde{\tau}_t)\)</span> denote accepted Requirements, Spec, and semantic development trajectory, and let <span class="math inline">\(\alpha_{\leq t}\)</span> denote physical implementation actions. A repository snapshot is produced by some development map</p>
+<p id="eq:repository-result" class="equation-block"><span class="math display">\[X_t=\Psi(h_t,\alpha_{\leq t}).\]</span><a class="equation-number" href="#eq:repository-result" aria-label="Equation 5" data-paper-link="true">(5)</a></p>
+<p>This map is generally not injective:</p>
+<p id="eq:non-injective-code" class="equation-block"><span class="math display">\[\exists (h,\alpha)\neq(h',\alpha')
+  \quad\text{s.t.}\quad
+  \Psi(h,\alpha)=\Psi(h',\alpha').\]</span><a class="equation-number" href="#eq:non-injective-code" aria-label="Equation 6" data-paper-link="true">(6)</a></p>
+<p>Different accepted intentions, rejected alternatives, pauses, and verification histories can yield the same or observationally equivalent source snapshot. Code is therefore necessary evidence of implementation reality, but it is not a lossless encoding of project process.</p>
+<h2 data-number="3.2" id="state-native-read-contract"><span class="header-section-number">3.2</span> State-Native Read Contract<a class="heading-anchor" href="#state-native-read-contract" aria-label="Link to this section">#</a></h2>
+<p>A state-native memory system maintains machine-owned project state <span class="math inline">\(z_t\)</span> as an explicit object and answers queries through a deterministic projection <span class="math inline">\(\Pi_q\)</span>:</p>
+<p id="eq:state-query" class="equation-block"><span class="math display">\[\operatorname{Read}(q,z_t) = \Pi_q(z_t).\]</span><a class="equation-number" href="#eq:state-query" aria-label="Equation 7" data-paper-link="true">(7)</a></p>
+<p>The query may still select a branch or view, but it does not rank competing memories to infer machine-owned current fields. If <span class="math inline">\(z_t\)</span> is coherently published and <span class="math inline">\(\Pi_q\)</span> is defined over those fields, then</p>
+<p id="eq:projection-exactness" class="equation-block"><span class="math display">\[d_q\!\left(\operatorname{Read}(q,z_t),\Pi_q(z_t)\right)=0,\]</span><a class="equation-number" href="#eq:projection-exactness" aria-label="Equation 8" data-paper-link="true">(8)</a></p>
+<p>where <span class="math inline">\(d_q\)</span> is restricted to the projected structured fields. This property does not imply that narrative documents are always truthful or that an agent will interpret them perfectly. It means that current branch identity, lifecycle, verification, dependency, revision, and related machine-owned state are read rather than reconstructed.</p>
+<p>TreeWork does not remove repository inspection or semantic retrieval. It changes their roles. Let <span class="math inline">\(\mathcal{M}_t\)</span> denote maintained project memory, including machine state and scope-owned artifacts; Section&nbsp;<a href="#sec:method" data-reference-type="ref" data-reference="sec:method" data-paper-link="true">4</a> defines it fully. The continuation context can be expressed as</p>
+<p id="eq:composed-work-context" class="equation-block"><span class="math display">\[C_t^{\mathrm{work}}(q_t)
+  =
+  \operatorname{Compose}\!\left(
+    O_\beta(q_t,X_t),
+    \Pi_{q_t}(\mathcal{M}_t),
+    R_k(q_t,H_t)
+  \right).\]</span><a class="equation-number" href="#eq:composed-work-context" aria-label="Equation 9" data-paper-link="true">(9)</a></p>
+<p>The repository observation grounds the agent in implemented behavior; the state projection supplies authoritative coordination state; optional retrieval supplies relevant experience or history. TreeWork addresses the second role without claiming to replace the other two.</p>
+<h2 data-number="3.3" id="design-requirements"><span class="header-section-number">3.3</span> Design Requirements<a class="heading-anchor" href="#design-requirements" aria-label="Link to this section">#</a></h2>
+<p>A state-native project memory for coding agents should satisfy:</p>
+<ol>
+<li><p><strong>Stable addressability</strong>: each branch has a durable identity.</p></li>
+<li><p><strong>Scoped loading</strong>: an agent can recover one branch without loading the entire project.</p></li>
+<li><p><strong>Implementation grounding</strong>: maintained project memory complements targeted source inspection rather than duplicating or replacing it.</p></li>
+<li><p><strong>Explicit authority</strong>: intended design, current reality, learned conclusions, and machine state have distinct owners.</p></li>
+<li><p><strong>Atomic transitions</strong>: failed mutations do not publish partial machine state.</p></li>
+<li><p><strong>Trajectory observability</strong>: meaningful state changes are replayable without storing private reasoning or raw activity logs.</p></li>
+<li><p><strong>Agent independence</strong>: a different model, provider, or human can query the same accepted state.</p></li>
+<li><p><strong>Local freedom</strong>: the system constrains project movement and contracts without prescribing every implementation action.</p></li>
+</ol>
+<h1 data-number="4" id="sec:method"><span class="header-section-number">4</span> TreeWork Methodology<a class="heading-anchor" href="#sec:method" aria-label="Link to this section">#</a></h1>
+<p>Figure&nbsp;<a href="#fig:method-overview" data-reference-type="ref" data-reference="fig:method-overview" data-paper-link="true">2</a> gives an end-to-end view of how <span class="smallcaps">TreeWork</span> turns partial repository observation into recoverable continuation. Alignment establishes accepted Requirements and Specs; project memory combines topology, machine-owned lifecycle state, branch-scoped artifacts, and Verification; marker-committed transactions publish state with semantic events; and deterministic projections recover the same accepted branch context for agents and humans.</p>
+<figure id="fig:method-overview">
+<img src="__TREEWORK_PAPER_ASSET__/persistent_project_state_infographic_8k_ultra_clear.png" alt="End-to-end TreeWork overview. Alignment turns intent and repository reality into accepted Requirements and Specs; the Project Tree externalizes branch topology, lifecycle, evidence, and targeted source views; marker-committed transactions and deterministic projections preserve recoverable project memory across context resets and agent handoffs." loading="lazy" decoding="async" width="8192" height="4610"><figcaption aria-hidden="true">End-to-end TreeWork overview. Alignment turns intent and repository reality into accepted Requirements and Specs; the Project Tree externalizes branch topology, lifecycle, evidence, and targeted source views; marker-committed transactions and deterministic projections preserve recoverable project memory across context resets and agent handoffs.</figcaption>
+</figure>
+<h2 data-number="4.1" id="project-state-space"><span class="header-section-number">4.1</span> Project State Space<a class="heading-anchor" href="#project-state-space" aria-label="Link to this section">#</a></h2>
+<p>At accepted transaction time <span class="math inline">\(t\)</span>, let <span class="math inline">\(\mathcal{B}_t\)</span> be the set of branches. The hierarchical work structure is an ordered rooted tree</p>
+<p><span class="math display">\[\mathcal{T}_t = (\mathcal{B}_t,E^h_t,\prec_t),\]</span></p>
+<p>where <span class="math inline">\(E^h_t\)</span> contains parent–child edges and <span class="math inline">\(\prec_t\)</span> is stable sibling order. Execution prerequisites form a directed acyclic graph</p>
+<p><span class="math display">\[\mathcal{D}_t = (\mathcal{B}_t,E^d_t).\]</span></p>
+<p>The complete project graph is</p>
+<p id="eq:project-graph" class="equation-block"><span class="math display">\[\mathcal{G}_t = (\mathcal{B}_t,E^h_t\cup E^d_t).\]</span><a class="equation-number" href="#eq:project-graph" aria-label="Equation 10" data-paper-link="true">(10)</a></p>
+<p>Hierarchy answers <em>where work belongs</em>; dependency answers <em>what must precede what</em>. The two relations are intentionally separate.</p>
+<p>Each branch <span class="math inline">\(b\in\mathcal{B}_t\)</span> has machine-owned state</p>
+<p id="eq:branch-state" class="equation-block"><span class="math display">\[x_t(b)=
+  \bigl(
+    \ell_t(b),
+    v_t(b),
+    \iota_t(b),
+    \rho_t(b)
+  \bigr),\]</span><a class="equation-number" href="#eq:branch-state" aria-label="Equation 11" data-paper-link="true">(11)</a></p>
+<p>where</p>
+<p><span class="math display">\[\begin{aligned}
+  \ell_t(b) &amp;\in
+  \mathcal{L}=
+  \{\texttt{pending},\texttt{in\_progress},\texttt{paused},
+    \texttt{complete},\texttt{aborted}\},\\
+  v_t(b) &amp;\in
+  \mathcal{V}=
+  \{\texttt{unverified},\texttt{partial},
+    \texttt{verified},\texttt{failed}\},\end{aligned}\]</span></p>
+<p><span class="math inline">\(\iota_t(b)\)</span> records optional worktree isolation, and <span class="math inline">\(\rho_t(b)\)</span> records a status reason.</p>
+<p>The global machine state is</p>
+<p id="eq:global-state" class="equation-block"><span class="math display">\[z_t =
+  \bigl(
+    g_t,c_t,r_t,o_t,\mathcal{G}_t,\{x_t(b)\}_{b\in\mathcal{B}_t}
+  \bigr),\]</span><a class="equation-number" href="#eq:global-state" aria-label="Equation 12" data-paper-link="true">(12)</a></p>
+<p>where <span class="math inline">\(g_t\)</span> is the project stage, <span class="math inline">\(c_t\)</span> the control-workspace branch cursor, <span class="math inline">\(r_t\)</span> the accepted tree revision, and <span class="math inline">\(o_t\)</span> an optional open Tree Editing Session.</p>
+<h2 data-number="4.2" id="scope-owned-project-memory"><span class="header-section-number">4.2</span> Scope-Owned Project Memory<a class="heading-anchor" href="#scope-owned-project-memory" aria-label="Link to this section">#</a></h2>
+<p>Machine state is necessary but insufficient for development. Let</p>
+<p id="eq:branch-artifacts" class="equation-block"><span class="math display">\[a_t(b)=
+  \bigl(
+    S_t(b),P_t(b),R_t(b),F_t(b),V_t(b)
+  \bigr)\]</span><a class="equation-number" href="#eq:branch-artifacts" aria-label="Equation 13" data-paper-link="true">(13)</a></p>
+<p>denote branch-authored artifacts:</p>
+<ul>
+<li><p><span class="math inline">\(S_t(b)\)</span>: technical specification formed before coding;</p></li>
+<li><p><span class="math inline">\(P_t(b)\)</span>: executable scope, acceptance criteria, and local steps;</p></li>
+<li><p><span class="math inline">\(R_t(b)\)</span>: current reality, recent meaningful progress, open issues, and exit notes;</p></li>
+<li><p><span class="math inline">\(F_t(b)\)</span>: decisions, contract effects, risks, and unknowns learned during implementation; and</p></li>
+<li><p><span class="math inline">\(V_t(b)\)</span>: recorded verification evidence.</p></li>
+</ul>
+<p>The root additionally owns user-confirmed Requirements and a project-level Spec. The project memory at time <span class="math inline">\(t\)</span> is</p>
+<p id="eq:memory-state" class="equation-block"><span class="math display">\[\mathcal{M}_t=
+  \left(
+    z_t,
+    \mathcal{A}_t,
+    \mathcal{E}_{\leq t},
+    \mathcal{K}_t
+  \right),\]</span><a class="equation-number" href="#eq:memory-state" aria-label="Equation 14" data-paper-link="true">(14)</a></p>
+<p>where <span class="math inline">\(\mathcal{A}_t=\{a_t(b):b\in\mathcal{B}_t\}\)</span> plus root artifacts, <span class="math inline">\(\mathcal{E}_{\leq t}\)</span> is the ordered semantic event stream, and <span class="math inline">\(\mathcal{K}_t\)</span> is the set of immutable replay checkpoints.</p>
+<p>The artifacts are not interchangeable. A Spec is not a task checklist; Progress is not a command log; Findings are not unfinished work; and events are not a replacement for narrative documents. This ownership partition reduces the need for a future agent to infer document semantics.</p>
+<div id="tab:artifact-ownership">
+<div class="table-scroll" role="region" tabindex="0"><table>
+<caption>TreeWork separates project memory by the question each artifact owns.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Artifact</th>
+<th style="text-align: left;">Durable question answered</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Requirements</td>
+<td style="text-align: left;">What outcome and boundaries did the user accept?</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Spec</td>
+<td style="text-align: left;">How should this project or branch be designed before coding?</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Tree</td>
+<td style="text-align: left;">Where does work belong and which prerequisites constrain it?</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Plan</td>
+<td style="text-align: left;">What work is owned and what constitutes completion?</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Progress</td>
+<td style="text-align: left;">What is true now and what remains open?</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Findings</td>
+<td style="text-align: left;">What conclusions cannot be recovered reliably from code?</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Verification</td>
+<td style="text-align: left;">What evidence supports acceptance?</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Events</td>
+<td style="text-align: left;">Which accepted state transitions formed the trajectory?</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<h2 data-number="4.3" id="admissible-movement"><span class="header-section-number">4.3</span> Admissible Movement<a class="heading-anchor" href="#admissible-movement" aria-label="Link to this section">#</a></h2>
+<p>Let <span class="math inline">\(\mathcal{S}\)</span> be a state space and <span class="math inline">\(\mathcal{U}\)</span> a set of actions. A fixed workflow can be modeled as a policy or schedule</p>
+<p><span class="math display">\[\pi_{\mathrm{wf}}:\mathcal{S}\rightarrow\mathcal{U}\]</span></p>
+<p>that determines the next process step. <span class="smallcaps">TreeWork</span> does not define such a policy. It defines an admissible transition relation</p>
+<p id="eq:admissible-relation" class="equation-block"><span class="math display">\[\Gamma
+  \subseteq
+  \mathcal{S}\times\mathcal{U}\times\mathcal{S}.\]</span><a class="equation-number" href="#eq:admissible-relation" aria-label="Equation 15" data-paper-link="true">(15)</a></p>
+<p>The coding agent selects a local policy <span class="math inline">\(\pi_{\mathrm{agent}}\)</span> and retains freedom over implementation actions. <span class="smallcaps">TreeWork</span> accepts a movement only when <span class="math inline">\((z_t,u_t,z_{t+1})\in\Gamma\)</span>. Thus the system structures the development trajectory without becoming an execution orchestrator.</p>
+<h2 data-number="4.4" id="pre-tree-alignment"><span class="header-section-number">4.4</span> Pre-Tree Alignment<a class="heading-anchor" href="#pre-tree-alignment" aria-label="Link to this section">#</a></h2>
+<p>Let <span class="math inline">\(U\)</span> denote unresolved user intent and <span class="math inline">\(W\)</span> the investigated project and external evidence. Alignment produces user-facing requirements <span class="math inline">\(Q\)</span> and a technical project specification <span class="math inline">\(S\)</span>:</p>
+<p><span class="math display">\[(Q,S)=\operatorname{Align}(U,W).\]</span></p>
+<p>The operation is interactive rather than a single model call. The agent investigates facts, proposes a concrete interpretation, exposes material alternatives, and obtains user correction. The stage may advance only when an explicit review predicate holds:</p>
+<p id="eq:alignment-gate" class="equation-block"><span class="math display">\[\operatorname{Approved}_{\mathrm{user}}(Q,S)=1.\]</span><a class="equation-number" href="#eq:alignment-gate" aria-label="Equation 16" data-paper-link="true">(16)</a></p>
+<p>Raw ideas, references, and unresolved assumptions may support the process, but they do not become accepted Requirements merely by being written to disk.</p>
+<h2 data-number="4.5" id="build-tree"><span class="header-section-number">4.5</span> Build Tree<a class="heading-anchor" href="#build-tree" aria-label="Link to this section">#</a></h2>
+<p>The Lead Agent authors one declarative desired-state document <span class="math inline">\(Y\)</span> containing a rooted hierarchy, stable order, concise purpose, Spec references, and dependencies. A Tree Editing Session records the accepted base revision, event sequence, and state hash. The candidate is valid only if</p>
+<p id="eq:tree-validity" class="equation-block"><span class="math display">\[\begin{split}
+  \operatorname{Valid}(Y,z_t) \equiv {}&amp;
+  \operatorname{OneRoot}(Y)
+  \land \operatorname{UniqueIds}(Y)\\
+  &amp;\land \operatorname{Tree}(E_Y^h)
+  \land \operatorname{DAG}(E_Y^d)\\
+  &amp;\land \operatorname{SafeSpecs}(Y)
+  \land \operatorname{HistoryPreserved}(Y,z_t)\\
+  &amp;\land \operatorname{BaseMatches}(Y,z_t).
+\end{split}\]</span><a class="equation-number" href="#eq:tree-validity" aria-label="Equation 17" data-paper-link="true">(17)</a></p>
+<p>The accepted update is</p>
+<p id="eq:atomic-apply" class="equation-block"><span class="math display">\[\operatorname{Apply}(\mathcal{M}_t,Y)=
+  \begin{cases}
+    (\mathcal{M}_{t+1},e_{t+1},\operatorname{ok}), &amp; \operatorname{Valid}(Y,z_t),\\
+    (\mathcal{M}_t,\varnothing,\operatorname{error}), &amp; \text{otherwise}.
+  \end{cases}\]</span><a class="equation-number" href="#eq:atomic-apply" aria-label="Equation 18" data-paper-link="true">(18)</a></p>
+<p>On success, the runtime computes semantic change from desired state, scaffolds new branch documents without overwriting existing content, publishes accepted state, appends one <code>tree.applied</code> event, and advances the tree revision. On failure, it preserves the previous accepted state and event sequence. The candidate remains editable.</p>
+<p>Tree and Specs are developed together. A Spec may reveal a missing branch or dependency; the emerging Tree may reveal that design belongs at a different scope. “Spec first” therefore means design before coding, not “finish every document before seeing the project structure.”</p>
+<h2 data-number="4.6" id="work-tree"><span class="header-section-number">4.6</span> Work Tree<a class="heading-anchor" href="#work-tree" aria-label="Link to this section">#</a></h2>
+<p>For a branch <span class="math inline">\(b\)</span>, define an advisory readiness predicate</p>
+<p id="eq:readiness" class="equation-block"><span class="math display">\[\begin{split}
+  \operatorname{Ready}_t(b)\equiv {}&amp;
+  \ell_t(b)=\texttt{pending}\\
+  &amp;\land
+  \forall p\in\operatorname{Pred}_{\mathcal{D}_t}(b),\;
+    \ell_t(p)=\texttt{complete},
+\end{split}\]</span><a class="equation-number" href="#eq:readiness" aria-label="Equation 19" data-paper-link="true">(19)</a></p>
+<p>Every valid committed state satisfies <span class="math inline">\(\ell_t(p)=\texttt{complete}\Rightarrow v_t(p)=\texttt{verified}\)</span> because Verification is part of the completion gate. The Project Map can therefore derive readiness from completed prerequisites without evaluating a second, potentially divergent predicate. Readiness guides dispatch; it is not a hidden scheduler or a hard entry guard.</p>
+<p>Entering <span class="math inline">\(b\)</span> changes its lifecycle to <code>in_progress</code>, updates the control cursor when invoked from the control workspace, and creates or reuses a branch-bound Git worktree when available. The agent then reads the relevant Spec and Plan, performs local implementation, and maintains Progress, Findings, and Verification as reality changes.</p>
+<p>The primary lifecycle transitions are:</p>
+<p id="eq:lifecycle" class="equation-block"><span class="math display">\[\begin{array}{rcl}
+\texttt{pending} &amp;\xrightarrow{\textsc{Enter}}&amp;
+\texttt{in\_progress},\\
+\texttt{paused} &amp;\xrightarrow{\textsc{Enter}}&amp;
+\texttt{in\_progress},\\
+\ell\notin\{\texttt{complete},\texttt{aborted}\}
+&amp;\xrightarrow{\textsc{Pause}}&amp;
+\texttt{paused},\\
+\ell\notin\{\texttt{complete},\texttt{aborted}\}
+&amp;\xrightarrow{\textsc{Abort}}&amp;
+\texttt{aborted},\\
+\ell\notin\{\texttt{complete},\texttt{aborted}\}
+&amp;\xrightarrow{\textsc{Complete}}&amp;
+\texttt{complete}.
+\end{array}\]</span><a class="equation-number" href="#eq:lifecycle" aria-label="Equation 20" data-paper-link="true">(20)</a></p>
+<p>Completion is protected by</p>
+<p id="eq:completion-gate" class="equation-block"><span class="math display">\[\begin{aligned}
+  \operatorname{CanComplete}_t(b)
+  ={}&amp;
+  \operatorname{AcceptanceDone}_t(b)
+  \land [v_t(b)=\texttt{verified}]\\
+  &amp;\land \operatorname{StateConsistent}_t
+  \land \operatorname{WorkspaceSafe}_t(b).
+\end{aligned}\]</span><a class="equation-number" href="#eq:completion-gate" aria-label="Equation 21" data-paper-link="true">(21)</a></p>
+<p>This makes “done” a state supported by acceptance and evidence rather than an agent’s subjective stopping decision.</p>
+<h2 data-number="4.7" id="deterministic-recall"><span class="header-section-number">4.7</span> Deterministic Recall<a class="heading-anchor" href="#deterministic-recall" aria-label="Link to this section">#</a></h2>
+<p>For branch <span class="math inline">\(b\)</span>, let <span class="math inline">\(N_t(b)\)</span> contain its parent, ordered children, and incident dependency edges. Branch recall is the projection</p>
+<p id="eq:recall" class="equation-block"><span class="math display">\[\operatorname{Recall}_t(b)
+  =
+  \Pi_b\!\left(
+    z_t,
+    N_t(b),
+    a_t(b)
+  \right).\]</span><a class="equation-number" href="#eq:recall" aria-label="Equation 22" data-paper-link="true">(22)</a></p>
+<p>The projection includes stage, current branch, lifecycle, verification, isolation, structural neighborhood, document locations, acceptance state, and verification gap. It also serializes machine-derived allowed actions, blocked actions with reason codes, and the Tree revision, event sequence, and accepted Tree hash that identify the committed read. Commands re-evaluate their guards before publication, so eligibility remains safe across a read–act race. Recall is derived at read time and is not persisted as a second copy of branch truth. It supports recovery after interruption, handoff, or uncertainty rather than serving as a mandatory operation for newly created branches.</p>
+<h2 data-number="4.8" id="compressed-development-trajectory"><span class="header-section-number">4.8</span> Compressed Development Trajectory<a class="heading-anchor" href="#compressed-development-trajectory" aria-label="Link to this section">#</a></h2>
+<p>The full physical execution trajectory would include every model token, tool call, file edit, observation, and Git operation:</p>
+<p><span class="math display">\[\tau_t=(z_0,a_0,o_0,z_1,\ldots,z_t).\]</span></p>
+<p><span class="smallcaps">TreeWork</span> does not store this object. It records a compressed semantic trajectory</p>
+<p id="eq:compressed-trajectory" class="equation-block"><span class="math display">\[\widetilde{\tau}_t=(e_1,e_2,\ldots,e_t),\]</span><a class="equation-number" href="#eq:compressed-trajectory" aria-label="Equation 23" data-paper-link="true">(23)</a></p>
+<p>where each <span class="math inline">\(e_i\)</span> is one accepted project mutation such as alignment acceptance, tree application, branch entry, pause, completion, abort, or verification. Every successful transaction publishes accepted state and exactly one event as two views of the same commit. Failed transactions publish neither.</p>
+<p>The current Project Map reads materialized accepted state; it does not rebuild live state by replaying events. Replay combines immutable checkpoints with typed events to reconstruct historical workflow states. This boundary keeps current reads efficient while preserving trajectory inspection.</p>
+<h2 data-number="4.9" id="coherent-publication"><span class="header-section-number">4.9</span> Coherent Publication<a class="heading-anchor" href="#coherent-publication" aria-label="Link to this section">#</a></h2>
+<p>Let <span class="math inline">\(P_t\)</span> be a publication marker containing event sequence, tree revision, and tree hash. A reader accepts a state tuple only when marker reads before and after the tuple agree:</p>
+<p id="eq:coherent-read" class="equation-block"><span class="math display">\[P_t^{(A)}=P_t^{(B)}
+  \land
+  \operatorname{HashValid}(z_t)
+  \land
+  \operatorname{TailSeq}(\mathcal{E}_{\le t})=P_t.\operatorname{seq}.\]</span><a class="equation-number" href="#eq:coherent-read" aria-label="Equation 24" data-paper-link="true">(24)</a></p>
+<p>Mutations are serialized by a project-wide lock. The publication marker is written last. If preparation fails, a recovery journal restores accepted state and the exact previous event-log length. This implements the practical all-or-nothing semantics promised by Equation&nbsp;<a href="#eq:atomic-apply" data-reference-type="ref" data-reference="eq:atomic-apply" data-paper-link="true">(18)</a> without requiring a single physical write across all files.</p>
+<h2 data-number="4.10" id="multiple-agents"><span class="header-section-number">4.10</span> Multiple Agents<a class="heading-anchor" href="#multiple-agents" aria-label="Link to this section">#</a></h2>
+<p>Let agents <span class="math inline">\(i=1,\ldots,n\)</span> have private model contexts <span class="math inline">\(C_t^{(i)}\)</span> and assigned worktrees <span class="math inline">\(w_i\)</span>. They share the same project memory <span class="math inline">\(\mathcal{M}_t\)</span>:</p>
+<p id="eq:multi-agent-context" class="equation-block"><span class="math display">\[C_{t+1}^{(i)}
+  =
+  \operatorname{Compose}\!\left(
+    C_t^{(i)},\Pi_{b_i}(\mathcal{M}_t)
+  \right).\]</span><a class="equation-number" href="#eq:multi-agent-context" aria-label="Equation 25" data-paper-link="true">(25)</a></p>
+<p>The Lead assigns dependency-independent branches, gives each worker one branch-bound worktree, and confirms the worker’s interpretation before coding. Workers follow the same branch-local protocol and return commits plus verification evidence. <span class="smallcaps">TreeWork</span> does not store worker identity, provider sessions, assignment queues, or messages. It coordinates through shared work state rather than duplicating the host agent runtime.</p>
+<h1 data-number="5" id="sec:formal-analysis"><span class="header-section-number">5</span> Formal Analysis<a class="heading-anchor" href="#sec:formal-analysis" aria-label="Link to this section">#</a></h1>
+<p>This analysis characterizes how explicit project state affects project-continuation decisions. Code quality remains an empirical question outside the scope of the formal results. The main results connect action-relevant observation aliasing to unavoidable continuation error or evidence-recovery cost, then identify when an explicit state projection is sufficient to remove hidden coordination-state aliasing. Transactional soundness ensures that the projection comes from one coherent committed state.</p>
+<h2 data-number="5.1" id="observation-aliasing-and-continuation-error"><span class="header-section-number">5.1</span> Observation Aliasing and Continuation Error<a class="heading-anchor" href="#observation-aliasing-and-continuation-error" aria-label="Link to this section">#</a></h2>
+<p id="eq:observation-map" class="equation-block">Our claims concern <em>project-level continuation decisions</em> governed by the admissible transition relation <span class="math inline">\(\Gamma\)</span>, rather than arbitrary local code edits. Let <span class="math inline">\(\Omega\)</span> be the set of project worlds. Each <span class="math inline">\(\omega\in\Omega\)</span> induces a repository <span class="math inline">\(X(\omega)\)</span>, a historical memory collection <span class="math inline">\(H(\omega)\)</span>, and an accepted coordination state <span class="math inline">\(z(\omega)\in\mathcal{Z}\)</span>. For a fixed continuation query <span class="math inline">\(q\)</span>, define the observation available under repository budget <span class="math inline">\(\beta\)</span> and retrieval depth <span class="math inline">\(k\)</span> as <span class="math display">\[\phi_{\beta,k}(q,\omega)
+=
+\Bigl(
+q,\,
+O_\beta(q,X(\omega)),\,
+R_k(q,H(\omega))
+\Bigr).\]</span><a class="equation-number" href="#eq:observation-map" aria-label="Equation 26" data-paper-link="true">(26)</a></p>
+<p id="eq:admissible-set" class="equation-block">Let <span class="math inline">\(\mathcal U_c\)</span> be the set of project-level continuation actions, such as entering, pausing, aborting, or completing a branch. Given <span class="math inline">\(\Gamma\subseteq\mathcal Z\times\mathcal U_c\times\mathcal Z\)</span>, define the admissible continuation set <span class="math display">\[\operatorname{Adm}_\Gamma(z)
+=
+\left\{
+u\in\mathcal U_c:
+\exists z'\in\mathcal Z,\ (z,u,z')\in\Gamma
+\right\}.\]</span><a class="equation-number" href="#eq:admissible-set" aria-label="Equation 27" data-paper-link="true">(27)</a></p>
+<div class="definition">
+<p id="eq:disjoint-actions" class="equation-block"><strong>Definition 5.1</strong> (Decisive observation alias).  Two project worlds <span class="math inline">\(\omega_1,\omega_2\)</span> are decisively aliased under <span class="math inline">\(\phi_{\beta,k}\)</span> for query <span class="math inline">\(q\)</span> if <span class="math display">\[\phi_{\beta,k}(q,\omega_1)
+=
+\phi_{\beta,k}(q,\omega_2)\]</span> while <span class="math display">\[\operatorname{Adm}_\Gamma(z(\omega_1))
+\cap
+\operatorname{Adm}_\Gamma(z(\omega_2))
+=
+\varnothing.\]</span> Thus, the available evidence is identical even though no project-level continuation action is valid in both worlds.<a class="equation-number" href="#eq:same-observation" aria-label="Equation 28" data-paper-link="true">(28)</a><a class="equation-number" href="#eq:disjoint-actions" aria-label="Equation 29" data-paper-link="true">(29)</a></p>
+</div>
+<div id="thm:aliasing-lower-bound" class="theorem">
+<p id="eq:aliasing-error-bound" class="equation-block"><strong>Theorem 5.2</strong> (Continuation error under decisive aliasing).  <em>Let <span class="math inline">\(\omega_1,\omega_2\)</span> be decisively aliased, and let <span class="math inline">\(\pi(\cdot\mid o)\)</span> be any possibly randomized policy that chooses a continuation action using only the observation <span class="math inline">\(o=\phi_{\beta,k}(q,\omega_i)\)</span>. Under prior probabilities <span class="math inline">\(p\)</span> and <span class="math inline">\(1-p\)</span> for the two worlds, respectively, <span class="math display">\[\Pr[\textnormal{admissible continuation}]
+\le
+\max\{p,1-p\}.\]</span> Equivalently, <span class="math display">\[\Pr[\textnormal{continuation error}]
+\ge
+\min\{p,1-p\}.\]</span> In particular, under an equal prior, every observation-only policy has continuation error at least <span class="math inline">\(1/2\)</span> on the pair.</em><a class="equation-number" href="#eq:aliasing-success-bound" aria-label="Equation 30" data-paper-link="true">(30)</a><a class="equation-number" href="#eq:aliasing-error-bound" aria-label="Equation 31" data-paper-link="true">(31)</a></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> Write <span class="math inline">\(A_i=\operatorname{Adm}_\Gamma(z(\omega_i))\)</span>. Because the observations are identical, the policy uses the same distribution <span class="math inline">\(\pi(\cdot\mid o)\)</span> in both worlds. Define <span class="math inline">\(\pi(A\mid o)=\sum_{u\in A}\pi(u\mid o)\)</span>. Its success probability is <span class="math display">\[p\,\pi(A_1\mid o)
++
+(1-p)\,\pi(A_2\mid o).\]</span> Since <span class="math inline">\(A_1\cap A_2=\varnothing\)</span>, <span class="math inline">\(\pi(A_1\mid o)+\pi(A_2\mid o)\le 1\)</span>. Therefore <span class="math display">\[\begin{aligned}
+p\,\pi(A_1\mid o)
++
+(1-p)\,\pi(A_2\mid o)
+&amp;\le
+\max\{p,1-p\}
+\bigl(
+\pi(A_1\mid o)+\pi(A_2\mid o)
+\bigr)\\
+&amp;\le
+\max\{p,1-p\}.\end{aligned}\]</span> Taking one minus both sides yields Equation&nbsp;<a href="#eq:aliasing-error-bound" data-reference-type="eqref" data-reference="eq:aliasing-error-bound" data-paper-link="true">(31)</a>.&nbsp;◻</p>
+</div>
+<div id="cor:repository-nonidentifiability" class="corollary">
+<p><strong>Corollary 5.3</strong> (Repository-only non-identifiability).  <em>Suppose two distinct development histories satisfy <span class="math display">\[\Psi(h,\alpha)=\Psi(h',\alpha')=X\]</span> but induce disjoint admissible continuation sets. Then any policy whose input is only a function of the repository snapshot <span class="math inline">\(X\)</span> is subject to Theorem&nbsp;<a href="#thm:aliasing-lower-bound" data-reference-type="ref" data-reference="thm:aliasing-lower-bound" data-paper-link="true">5.2</a>.</em></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> Every code-only observation has the same value in the two worlds because the repository snapshot is identical. The worlds are therefore decisively aliased, and Theorem&nbsp;<a href="#thm:aliasing-lower-bound" data-reference-type="ref" data-reference="thm:aliasing-lower-bound" data-paper-link="true">5.2</a> applies.&nbsp;◻</p>
+</div>
+<h4 data-number="5.1.0.1" id="a-treework-witness."><span class="header-section-number">5.1.0.1</span> A TreeWork witness.<a class="heading-anchor" href="#a-treework-witness." aria-label="Link to this section">#</a></h4>
+<p>The condition above can arise from branch-bound execution rather than from an artificial complete-versus-incomplete pair. Let <span class="math inline">\(b_1\neq b_2\)</span> be two nonterminal branches, and let <span class="math inline">\(q\)</span> ask an agent to continue the branch assigned to its current bound workspace. Consider two worlds with the same observed source tree and the same retrieved historical records, while the hidden worktree binding resolves the invocation to <span class="math inline">\(b_1\)</span> in <span class="math inline">\(\omega_1\)</span> and to <span class="math inline">\(b_2\)</span> in <span class="math inline">\(\omega_2\)</span>. Instantiate the query-specific continuation action set as <span class="math display">\[\mathcal U_c(q)=\{\operatorname{Enter}(b_1),\operatorname{Enter}(b_2)\}.\]</span> TreeWork’s binding guard rejects cross-branch entry, so the admissible sets are <span class="math inline">\(\{\operatorname{Enter}(b_1)\}\)</span> and <span class="math inline">\(\{\operatorname{Enter}(b_2)\}\)</span>, respectively. They are disjoint even though <span class="math inline">\(\phi_{\beta,k}\)</span> is identical when the binding is absent from the repository and retrieval observations. This witness establishes realizability of decisive aliasing in the implemented coordination model; it does not assert a population frequency for such pairs.</p>
+<h2 data-number="5.2" id="recovery-cost"><span class="header-section-number">5.2</span> Recovery Cost<a class="heading-anchor" href="#recovery-cost" aria-label="Link to this section">#</a></h2>
+<p id="eq:separation-cost" class="equation-block">An additional evidence-acquisition procedure may inspect more files, search Git history, retrieve more memories, run tools, or request human clarification. We model <span class="math inline">\(\sigma\)</span> as a deterministic adaptive policy that maps its current transcript to either the next evidence request or <span class="math inline">\(\operatorname{Stop}\)</span>. Let <span class="math inline">\(T_\sigma(\omega)\)</span> be its terminal transcript in world <span class="math inline">\(\omega\)</span>, and let <span class="math inline">\(c_\sigma(\omega)\ge 0\)</span> be the accumulated token, tool, time, or human-interaction cost in that world. For a pair of worlds, define the minimum worst-case separation cost <span class="math display">\[C_{\mathrm{sep}}(\omega_1,\omega_2)
+=
+\inf_{\sigma:
+T_\sigma(\omega_1)\neq T_\sigma(\omega_2)}
+\max_{i\in\{1,2\}}c_\sigma(\omega_i),\]</span> with <span class="math inline">\(C_{\mathrm{sep}}=+\infty\)</span> when no available procedure distinguishes the pair.<a class="equation-number" href="#eq:separation-cost" aria-label="Equation 32" data-paper-link="true">(32)</a></p>
+<div id="thm:error-or-cost" class="theorem">
+<p><strong>Theorem 5.4</strong> (Error–recovery-cost dichotomy).  <em>For a decisively aliased pair <span class="math inline">\(\omega_1,\omega_2\)</span>, any deterministic adaptive continuation procedure that guarantees an admissible action in both worlds must incur worst-case additional evidence-acquisition cost at least <span class="math inline">\(C_{\mathrm{sep}}(\omega_1,\omega_2)\)</span>. If <span class="math inline">\(C_{\mathrm{sep}}(\omega_1,\omega_2)=+\infty\)</span>, no zero-error continuation procedure exists.</em></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> Suppose a procedure guarantees an admissible action in both worlds. Its terminal transcripts must differ: identical transcripts cause the deterministic decision rule to choose the same action, which cannot belong to two disjoint admissible sets. The procedure is therefore among those in the infimum in Equation&nbsp;<a href="#eq:separation-cost" data-reference-type="eqref" data-reference="eq:separation-cost" data-paper-link="true">(32)</a>, and its worst-case cost is at least <span class="math inline">\(C_{\mathrm{sep}}\)</span>. If <span class="math inline">\(C_{\mathrm{sep}}=+\infty\)</span>, no available procedure produces distinct terminal transcripts, so zero-error continuation is impossible.&nbsp;◻</p>
+</div>
+<h2 data-number="5.3" id="continuation-sufficiency-of-treework"><span class="header-section-number">5.3</span> Continuation Sufficiency of TreeWork<a class="heading-anchor" href="#continuation-sufficiency-of-treework" aria-label="Link to this section">#</a></h2>
+<p>For each continuation action <span class="math inline">\(u\in\mathcal U_c\)</span>, let <span class="math display">\[g_u(z)
+=
+\mathbf 1
+\left[
+u\in\operatorname{Adm}_\Gamma(z)
+\right]\]</span> be its admissibility guard.</p>
+<div class="definition">
+<p id="eq:guard-factorization" class="equation-block"><strong>Definition 5.5</strong> (Guard-complete projection).  A projection <span class="math inline">\(\Pi\)</span> of maintained project memory is guard-complete for <span class="math inline">\(\mathcal U_c\)</span> if, for every <span class="math inline">\(u\in\mathcal U_c\)</span>, there exists a deterministic function <span class="math inline">\(\widetilde g_u\)</span> such that <span class="math display">\[g_u(z(M))
+=
+\widetilde g_u(\Pi(M))
+\qquad
+\textnormal{for every committed project memory }M.\]</span><a class="equation-number" href="#eq:guard-factorization" aria-label="Equation 33" data-paper-link="true">(33)</a></p>
+</div>
+<div id="thm:continuation-sufficiency" class="lemma">
+<p id="eq:sufficient-projection" class="equation-block"><strong>Lemma 5.6</strong> (Guard agreement from a guard-complete projection).  <em>If <span class="math inline">\(\Pi\)</span> is guard-complete for <span class="math inline">\(\mathcal U_c\)</span>, then <span class="math display">\[\Pi(M)=\Pi(M')
+\quad\Longrightarrow\quad
+\operatorname{Adm}_\Gamma(z(M))
+=
+\operatorname{Adm}_\Gamma(z(M')).\]</span> Equivalently, two states with different admissible continuation sets cannot share the same projection.</em><a class="equation-number" href="#eq:sufficient-projection" aria-label="Equation 34" data-paper-link="true">(34)</a></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> Assume <span class="math inline">\(\Pi(M)=\Pi(M')\)</span>. For every <span class="math inline">\(u\in\mathcal U_c\)</span>, Equation&nbsp;<a href="#eq:guard-factorization" data-reference-type="eqref" data-reference="eq:guard-factorization" data-paper-link="true">(33)</a> gives <span class="math display">\[g_u(z(M))
+=
+\widetilde g_u(\Pi(M))
+=
+\widetilde g_u(\Pi(M'))
+=
+g_u(z(M')).\]</span> Thus exactly the same actions satisfy their guards in both states, which proves Equation&nbsp;<a href="#eq:sufficient-projection" data-reference-type="eqref" data-reference="eq:sufficient-projection" data-paper-link="true">(34)</a>.&nbsp;◻</p>
+</div>
+<p>This lemma records a representational consequence of guard completeness; it is not by itself a TreeWork-specific guarantee. The substantive obligation is to show that a concrete projection contains every field consulted by the runtime guards.</p>
+<div id="prop:treework-guard-complete" class="proposition">
+<p id="eq:coordination-projection" class="equation-block"><strong>Proposition 5.7</strong> (TreeWork hard-guard projection is continuation-sufficient).  <em>For the branch-lifecycle commands used during Work Tree, fix an invocation context <span class="math inline">\(j\)</span>. Let <span class="math display">\[\begin{aligned}
+\mathcal U_b=\{&amp;\operatorname{Enter}(b),\operatorname{Pause}(b),\\
+                &amp;\operatorname{Abort}(b),\operatorname{Complete}(b)\}.
+\end{aligned}\]</span> Let <span class="math inline">\(\operatorname{Targetable}_t(j,b)\)</span> indicate that a branch-scoped command issued from <span class="math inline">\(j\)</span> resolves to <span class="math inline">\(b\)</span>, and let <span class="math inline">\(\operatorname{EnterSafe}_t(j,b)\)</span> summarize the runtime’s worktree-binding and isolation checks for entering <span class="math inline">\(b\)</span>. Define the hard-guard projection <span class="math display">\[\begin{aligned}
+\chi_t(b,j)
+=
+\Bigl(&amp;\ell_t(b),v_t(b),
+  \operatorname{Targetable}_t(j,b),\\
+  &amp;\operatorname{EnterSafe}_t(j,b),
+  \operatorname{AcceptanceDone}_t(b),\\
+  &amp;\operatorname{StateConsistent}_t,
+  \operatorname{WorkspaceSafe}_t(b)\Bigr).
+\end{aligned}\]</span> Assume the environment predicates report exactly the checks performed by the runtime at transaction time. Then <span class="math inline">\(\chi_t(b,j)\)</span> is guard-complete for the hard lifecycle and completion guards over <span class="math inline">\(\mathcal U_b\)</span>.</em><a class="equation-number" href="#eq:coordination-projection" aria-label="Equation 35" data-paper-link="true">(35)</a></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> The guard for <span class="math inline">\(\operatorname{Enter}(b)\)</span> depends on a nonterminal lifecycle and the invocation and isolation checks summarized by <span class="math inline">\(\operatorname{Targetable}_t(j,b)\)</span> and <span class="math inline">\(\operatorname{EnterSafe}_t(j,b)\)</span>. The guards for <span class="math inline">\(\operatorname{Pause}(b)\)</span> and <span class="math inline">\(\operatorname{Abort}(b)\)</span> depend on target resolution and lifecycle. The guard for <span class="math inline">\(\operatorname{Complete}(b)\)</span> additionally depends on <span class="math inline">\(\operatorname{AcceptanceDone}_t(b)\)</span>, <span class="math inline">\(v_t(b)\)</span>, <span class="math inline">\(\operatorname{StateConsistent}_t\)</span>, and <span class="math inline">\(\operatorname{WorkspaceSafe}_t(b)\)</span>. Every hard guard therefore factors through <span class="math inline">\(\chi_t(b,j)\)</span>, so Lemma&nbsp;<a href="#thm:continuation-sufficiency" data-reference-type="ref" data-reference="thm:continuation-sufficiency" data-paper-link="true">5.6</a> applies.&nbsp;◻</p>
+</div>
+<p>Table&nbsp;<a href="#tab:runtime-correspondence" data-reference-type="ref" data-reference="tab:runtime-correspondence" data-paper-link="true">2</a> maps the predicates in <span class="math inline">\(\chi_t\)</span> to the runtime mechanisms and regression evidence used by the implementation. The proposition remains conditional on those mechanisms reporting the checks performed at transaction time.</p>
+<p>The runtime serializes an Agent-visible Recall interface containing the machine-derived allowed-action set, blocked actions with reason codes, and a publication marker <span class="math inline">\(m_t=(r_t,e_t,h_t)\)</span> containing the Tree revision, event sequence, and accepted Tree hash. Let <span class="math inline">\(D_{\mathrm{allow}}\)</span> decode the serialized allowed-action list.</p>
+<div id="prop:recall-interface-correspondence" class="proposition">
+<p id="eq:recall-interface-correspondence" class="equation-block"><strong>Proposition 5.8</strong> (Recall interface correspondence).  <em>Assume Recall eligibility and lifecycle commands evaluate the hard guards in Proposition&nbsp;<a href="#prop:treework-guard-complete" data-reference-type="ref" data-reference="prop:treework-guard-complete" data-paper-link="true">5.7</a> over the same committed state and invocation context. Then, at read time, <span class="math display">\[D_{\mathrm{allow}}
+\bigl(\operatorname{RecallAPI}_t(b,j)\bigr)
+=
+\operatorname{Adm}_\Gamma(z(M_t))\cap\mathcal U_b.\]</span></em><a class="equation-number" href="#eq:recall-interface-correspondence" aria-label="Equation 36" data-paper-link="true">(36)</a></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> Recall partitions every action in <span class="math inline">\(\mathcal U_b\)</span> into allowed or blocked using the same lifecycle, targetability, acceptance, verification, consistency, and workspace predicates represented by <span class="math inline">\(\chi_t(b,j)\)</span>. The decoder selects exactly the allowed partition. Guard completeness therefore makes that partition equal to the admissible lifecycle actions at the committed read state.&nbsp;◻</p>
+</div>
+<p>This equality is revision-scoped: a lifecycle command re-evaluates its guards before publication rather than treating an earlier Recall result as a durable capability.</p>
+<p id="eq:work-context-projection" class="equation-block">The complete branch work context also contains the structural neighborhood, advisory dependency readiness, and branch-owned artifacts: <span class="math display">\[\Pi_b^{\mathrm{work}}(M_t,j)
+=
+\Bigl(
+  \operatorname{RecallAPI}_t(b,j),\,
+  N_t(b),\,
+  \operatorname{Ready}_t(b),\,
+  S_t(b),P_t(b),R_t(b),F_t(b),V_t(b)
+\Bigr).\]</span> Dependency readiness is deliberately advisory in the implemented system: it guides branch choice but is not a hidden scheduler or a hard entry guard. The formal sufficiency claim concerns the declared project-level transaction guards under <span class="math inline">\(\Gamma\)</span>; readiness and the additional artifacts ground planning and local implementation but do not guarantee code quality.<a class="equation-number" href="#eq:work-context-projection" aria-label="Equation 37" data-paper-link="true">(37)</a></p>
+<div id="cor:no-coordination-aliasing" class="corollary">
+<p><strong>Corollary 5.9</strong> (Elimination of coordination-state aliasing).  <em>For committed TreeWork states satisfying the assumptions of Proposition&nbsp;<a href="#prop:treework-guard-complete" data-reference-type="ref" data-reference="prop:treework-guard-complete" data-paper-link="true">5.7</a>, two branch states with disjoint admissible movement sets must produce different coordination projections <span class="math inline">\(\chi_t(b,j)\)</span> and different decoded Recall eligibility. Hence the decisive-aliasing lower bound of Theorem&nbsp;<a href="#thm:aliasing-lower-bound" data-reference-type="ref" data-reference="thm:aliasing-lower-bound" data-paper-link="true">5.2</a> does not arise from hidden machine-owned coordination state once the matching committed Recall projection is supplied.</em></p>
+</div>
+<div id="cor:handoff-agreement" class="corollary">
+<p><strong>Corollary 5.10</strong> (Cross-agent continuation agreement).  <em>If two agents with arbitrary private contexts read the same committed Recall projection for the same invocation context, then they decode the same admissible project-level continuation set for branch <span class="math inline">\(b\)</span>. They may still choose different admissible actions or produce different code.</em></p>
+</div>
+<h2 data-number="5.4" id="committed-state-and-completion-soundness"><span class="header-section-number">5.4</span> Committed-State and Completion Soundness<a class="heading-anchor" href="#committed-state-and-completion-soundness" aria-label="Link to this section">#</a></h2>
+<p>Let <span class="math inline">\(\mathcal I(M)\)</span> collect the structural and publication invariants of a project memory, including one root, unique branch identifiers, a valid hierarchy, an acyclic dependency graph, revision consistency, and event-tail consistency.</p>
+<div id="thm:committed-state-soundness" class="theorem">
+<p id="eq:invariant-preserving-transition" class="equation-block"><strong>Theorem 5.11</strong> (Conditional committed-state soundness under marker-consistent publication).  <em>Assume (i) <span class="math inline">\(\mathcal I(M_0)\)</span>; (ii) for every successful transaction <span class="math inline">\(\tau\)</span> from <span class="math inline">\(M\)</span> to <span class="math inline">\(M'\)</span>, either <span class="math inline">\(M'\)</span> is explicitly validated against <span class="math inline">\(\mathcal I\)</span>, or <span class="math inline">\(\tau\)</span> is invariant-preserving, <span class="math display">\[\mathcal I(M)\land\operatorname{Guard}_\tau(M)
+\Longrightarrow
+\mathcal I(M');\]</span> (iii) every interrupted or failed publication recovers either by restoring the previous committed state and event tail or by finishing a complete intended state that satisfies condition (ii); and (iv) marker-last publication defines the logical commit point, while readers accept only marker-consistent tuples. Then every accepted read is derived from one complete committed state <span class="math inline">\(M_t\)</span> satisfying <span class="math inline">\(\mathcal I(M_t)\)</span>.</em><a class="equation-number" href="#eq:invariant-preserving-transition" aria-label="Equation 38" data-paper-link="true">(38)</a></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> By induction on the committed transaction sequence, every committed state satisfies <span class="math inline">\(\mathcal I\)</span>: the base state does by assumption; rollback restores the preceding committed state; finish-forward publishes the complete intended state; an explicitly validated transaction publishes a state satisfying <span class="math inline">\(\mathcal I\)</span>; and an invariant-preserving transaction carries <span class="math inline">\(\mathcal I\)</span> forward under its guard. Marker-last publication and marker-consistent reads prevent an accepted reader from combining components belonging to different logical commits. Therefore every accepted read corresponds to one complete committed state satisfying <span class="math inline">\(\mathcal I\)</span>.&nbsp;◻</p>
+</div>
+<p>This theorem is a conditional system invariant rather than an unconditional claim about arbitrary files on disk. The validation, journal, publication, and coherent-read assumptions are connected to implementation mechanisms and tests in Table&nbsp;<a href="#tab:runtime-correspondence" data-reference-type="ref" data-reference="tab:runtime-correspondence" data-paper-link="true">2</a>.</p>
+<div id="cor:completion-soundness" class="corollary">
+<p><strong>Corollary 5.12</strong> (Completion soundness).  <em>If a committed transaction changes branch <span class="math inline">\(b\)</span> to <span class="math inline">\(\ell_{t+1}(b)=\textnormal{complete}\)</span> only when <span class="math display">\[\operatorname{AcceptanceDone}_t(b)
+\land
+[v_t(b)=\textnormal{verified}]
+\land
+\operatorname{StateConsistent}_t
+\land
+\operatorname{WorkspaceSafe}_t(b),\]</span> then every accepted completion satisfies all four declared completion conditions at commit time.</em></p>
+</div>
+<div class="proof">
+<p><em>Proof.</em> The completion guard is evaluated before the committed lifecycle transition; the premise requires every accepted transition to satisfy all four conjuncts.&nbsp;◻</p>
+</div>
+<h1 data-number="6" id="sec:implementation"><span class="header-section-number">6</span> System Realization<a class="heading-anchor" href="#sec:implementation" aria-label="Link to this section">#</a></h1>
+<p><span class="smallcaps">TreeWork</span> is implemented as a local coding-agent plugin. Its primary surfaces are:</p>
+<ul>
+<li><p>an Agent Skill that teaches the three-stage protocol and document ownership;</p></li>
+<li><p>a Rust transaction CLI that parses declarative YAML, validates state, publishes lifecycle and verification transitions, manages recovery journals, and serves read models;</p></li>
+<li><p>branch-bound Git worktrees used as one-writer isolation boundaries;</p></li>
+<li><p>a local read-only MCP surface for branch Recall and Project Map launch; and</p></li>
+<li><p>a bundled Project Map with hierarchy, dependency, and trajectory replay views.</p></li>
+</ul>
+<div id="tab:runtime-correspondence">
+<div class="table-scroll" role="region" tabindex="0"><table style="width:21%;">
+<caption>Correspondence between formal predicates, runtime enforcement, and the public regression suite. These mechanisms discharge the implementation assumptions used by Proposition&nbsp;<a href="#prop:treework-guard-complete" data-reference-type="ref" data-reference="prop:treework-guard-complete" data-paper-link="true">5.7</a> and Theorem&nbsp;<a href="#thm:committed-state-soundness" data-reference-type="ref" data-reference="thm:committed-state-soundness" data-paper-link="true">5.11</a>; they do not establish code quality.</caption>
+<colgroup>
+<col style="width: 21%">
+<col>
+<col>
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Formal object</th>
+<th style="text-align: left;">Runtime mechanism</th>
+<th style="text-align: left;">Executable evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Lifecycle and <span class="math inline">\(\operatorname{Targetable}\)</span></td>
+<td style="text-align: left;">Canonical target resolution, terminal-state checks, branch-bound command dispatch, and serialized allowed/blocked lifecycle actions</td>
+<td style="text-align: left;">Lifecycle smoke tests, idempotent repeated commands, and rejected cross-branch worktree commands</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><span class="math inline">\(\operatorname{EnterSafe}\)</span> and <span class="math inline">\(\operatorname{WorkspaceSafe}\)</span></td>
+<td style="text-align: left;">Git worktree binding validation, repository inspection, and guarded cleanup plans</td>
+<td style="text-align: left;">Independent-worktree tests, missing-binding rejection, cleanup failpoints, and untrusted-path protection</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">\(\operatorname{AcceptanceDone}\)</span> and <span class="math inline">\(v_t\)</span></td>
+<td style="text-align: left;">Checklist parsing and a verified-only completion gate; state validation rejects complete-but-unverified branches</td>
+<td style="text-align: left;">Completion succeeds only after accepted checklist and Verification evidence in the lifecycle regression scenario</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><span class="math inline">\(\operatorname{RecallAPI}\)</span> correspondence</td>
+<td style="text-align: left;">Recall serializes Spec and execution documents, action eligibility with reason codes, and the Tree revision/event/hash marker; MCP reuses the CLI projection</td>
+<td style="text-align: left;">CLI regression checks blocked and allowed completion states; MCP regression checks eligibility and marker propagation</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">\(\mathcal I(M)\)</span> and rollback</td>
+<td style="text-align: left;">Desired-state validation, invariant-preserving lifecycle transitions, and a prepare-then-commit journal with rollback or complete finish-forward recovery</td>
+<td style="text-align: left;">Stale and malformed Apply rejection, lifecycle tests, and failpoints after checkpoint, accepted state, event, and durable intent</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Marker-consistent read</td>
+<td style="text-align: left;">A marker-defined logical commit point, double-marker reads, state hashes, and event-tail checks</td>
+<td style="text-align: left;">Pre/post-marker crash recovery, marker-race rejection, hash-mismatch, and partial-event-log tests</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<p>The topology authoring language contains one root and only the fields <code>id</code>, <code>title</code>, <code>purpose</code>, optional <code>spec</code>, <code>depends_on</code>, and ordered <code>children</code>. Lifecycle, verification, current branch, layout, notes, and progress are excluded from this document and remain owned by their corresponding state or narrative surfaces.</p>
+<p>The runtime uses typed, versioned event envelopes. It records stage and branch movement but intentionally excludes code diffs, shell history, private reasoning, agent identity, and provider sessions. Source provenance remains the responsibility of Git. The implementation and current documentation are maintained at <a href="https://github.com/Johnny-xuan/TreeWork">https://github.com/Johnny-xuan/TreeWork</a>.</p>
+<h1 data-number="7" id="sec:evaluation"><span class="header-section-number">7</span> Evaluation Protocol<a class="heading-anchor" href="#sec:evaluation" aria-label="Link to this section">#</a></h1>
+<p>The following protocol evaluates TreeWork in terms of state recovery, development drift, handoff efficiency, development quality, and system overhead.</p>
+<h2 data-number="7.1" id="research-questions"><span class="header-section-number">7.1</span> Research Questions<a class="heading-anchor" href="#research-questions" aria-label="Link to this section">#</a></h2>
+<h4 data-number="7.1.0.1" id="rq1-state-recovery."><span class="header-section-number">7.1.0.1</span> RQ1: State recovery.<a class="heading-anchor" href="#rq1-state-recovery." aria-label="Link to this section">#</a></h4>
+<p>Does <span class="smallcaps">TreeWork</span> improve exact recovery of structured project state after context reset, interruption, or agent replacement?</p>
+<h4 data-number="7.1.0.2" id="rq2-development-drift."><span class="header-section-number">7.1.0.2</span> RQ2: Development drift.<a class="heading-anchor" href="#rq2-development-drift." aria-label="Link to this section">#</a></h4>
+<p>Does it reduce divergence from accepted Requirements, Specs, boundaries, and dependencies over long projects?</p>
+<h4 data-number="7.1.0.3" id="rq3-handoff."><span class="header-section-number">7.1.0.3</span> RQ3: Handoff.<a class="heading-anchor" href="#rq3-handoff." aria-label="Link to this section">#</a></h4>
+<p>Does it reduce time, tokens, and errors when work moves between agents or from agent to human?</p>
+<h4 data-number="7.1.0.4" id="rq4-quality."><span class="header-section-number">7.1.0.4</span> RQ4: Quality.<a class="heading-anchor" href="#rq4-quality." aria-label="Link to this section">#</a></h4>
+<p>Does specification-first, branch-local execution improve acceptance satisfaction, integration correctness, and verification coverage?</p>
+<h4 data-number="7.1.0.5" id="rq5-cost."><span class="header-section-number">7.1.0.5</span> RQ5: Cost.<a class="heading-anchor" href="#rq5-cost." aria-label="Link to this section">#</a></h4>
+<p>What authoring, transition, token, and wall-clock overhead does state maintenance introduce?</p>
+<h2 data-number="7.2" id="baselines"><span class="header-section-number">7.2</span> Baselines<a class="heading-anchor" href="#baselines" aria-label="Link to this section">#</a></h2>
+<p>Experiments should compare at least:</p>
+<ol>
+<li><p>repository inspection with ordinary coding-agent context and no external memory;</p></li>
+<li><p>repository inspection plus flat project notes loaded manually;</p></li>
+<li><p>repository inspection plus retrieval-native memory over chunked project conversations and notes;</p></li>
+<li><p>repository inspection plus the same Requirements, Specs, hierarchical documents, and planning budget as <span class="smallcaps">TreeWork</span>, but without machine-owned transitions or deterministic projections; and</p></li>
+<li><p>repository inspection plus full <span class="smallcaps">TreeWork</span> state, documents, transactions, and Recall.</p></li>
+</ol>
+<p>The same model, tool permissions, repository snapshot, and execution budget should be used across conditions. Planning and artifact-authoring time, token budget, and human interaction must be matched separately or reported as part of the intervention cost. If a condition receives additional design effort, its quality result must be interpreted jointly with that overhead rather than as an isolated memory effect. Agent replacement should include both same-model and cross-model handoffs.</p>
+<h2 data-number="7.3" id="tasks"><span class="header-section-number">7.3</span> Tasks<a class="heading-anchor" href="#tasks" aria-label="Link to this section">#</a></h2>
+<p>The benchmark should contain greenfield, mid-project, and maintenance settings. Each project should require multiple branches, at least one dependency, material design decisions, interruption points, and verification. In addition to synthetic controlled projects, experiments should include real repositories and issue sequences derived from software-engineering benchmarks such as SWE-bench, extended from single issues to multi-issue project episodes.</p>
+<h2 data-number="7.4" id="community-field-evaluation"><span class="header-section-number">7.4</span> Community Field Evaluation<a class="heading-anchor" href="#community-field-evaluation" aria-label="Link to this section">#</a></h2>
+<p>Controlled tasks should be complemented by voluntary use on real projects. Plugin users can contribute consented, anonymized summaries of project scale, starting condition, interruption and handoff points, recovery friction, human corrections, rework, and completion outcomes. Raw source code, private Specs, and private event trajectories are not required. Because participation and project selection are self-selected, these observations measure external validity and recurring failure modes; they must be analyzed separately from causal comparisons under controlled baselines.</p>
+<h2 data-number="7.5" id="metrics"><span class="header-section-number">7.5</span> Metrics<a class="heading-anchor" href="#metrics" aria-label="Link to this section">#</a></h2>
+<p>Structured state recovery should use field-level exact match over normalized machine-owned fields: stage, current branch identifier, lifecycle, Verification, dependency predecessor sets, tree revision, and the derived set of advisory-ready branches and hard-admissible lifecycle actions. Narrative recovery is scored separately. The evaluation should report whether the agent locates the correct accepted Requirements and Spec revisions, then use a published, blinded rubric to score coverage and contradiction in its account of accepted design and open acceptance obligations. Document-location accuracy must not be conflated with narrative comprehension. Development metrics should include:</p>
+<ul>
+<li><p>requirement and acceptance satisfaction;</p></li>
+<li><p>design-contract violation rate;</p></li>
+<li><p>duplicate or incoherent branch creation;</p></li>
+<li><p>integration conflict and regression rate;</p></li>
+<li><p>verification coverage and unsupported completion attempts;</p></li>
+<li><p>handoff tokens and time to first correct action;</p></li>
+<li><p>project-state contradiction rate;</p></li>
+<li><p>total model tokens, tool calls, commands, and wall-clock time; and</p></li>
+<li><p>human correction effort.</p></li>
+</ul>
+<p>Trajectory drift can be measured at transition boundaries. Given accepted constraints <span class="math inline">\(\mathcal{C}_t\)</span> and the implementation state <span class="math inline">\(I_t\)</span>, define</p>
+<p id="eq:drift" class="equation-block"><span class="math display">\[\operatorname{Drift}_t
+  =
+  \begin{cases}
+    0, &amp; |\mathcal{C}_t|=0,\\[2pt]
+    \dfrac{
+      \left|\{c\in\mathcal{C}_t:\operatorname{violated}(c,I_t)\}\right|
+    }{
+      |\mathcal{C}_t|
+    }, &amp; |\mathcal{C}_t|&gt;0.
+  \end{cases}\]</span><a class="equation-number" href="#eq:drift" aria-label="Equation 39" data-paper-link="true">(39)</a></p>
+<p>This metric requires blinded human or rule-based adjudication for constraints that cannot be tested automatically.</p>
+<h2 data-number="7.6" id="ablations"><span class="header-section-number">7.6</span> Ablations<a class="heading-anchor" href="#ablations" aria-label="Link to this section">#</a></h2>
+<p>Useful ablations remove one mechanism at a time: Specs, branch-local document ownership, transition events, verification gates, worktree isolation, deterministic Recall, or dependency edges. This distinguishes the effect of the state model from the effect of merely adding more Markdown.</p>
+<h1 data-number="8" id="discussion"><span class="header-section-number">8</span> Discussion<a class="heading-anchor" href="#discussion" aria-label="Link to this section">#</a></h1>
+<h2 data-number="8.1" id="what-treework-is-not"><span class="header-section-number">8.1</span> What TreeWork Is Not<a class="heading-anchor" href="#what-treework-is-not" aria-label="Link to this section">#</a></h2>
+<p><span class="smallcaps">TreeWork</span> is not a semantic-memory replacement for all agent use cases. Retrieval remains useful for broad experience reuse, examples, domain knowledge, and loosely related history. The claim is narrower: authoritative current project state should not be reconstructed primarily from partial repository inspection and semantic top-<span class="math inline">\(k\)</span> retrieval.</p>
+<p><span class="smallcaps">TreeWork</span> is also not an autonomous runner, multi-agent scheduler, or source-code history system. It does not replace reading code, running tests, or inspecting Git history. Agent execution belongs to the host environment; implementation truth belongs to the repository and its tests; source history belongs to Git. <span class="smallcaps">TreeWork</span> maintains the shared coordination state in which those systems operate.</p>
+<h2 data-number="8.2" id="limits-of-state-native-memory"><span class="header-section-number">8.2</span> Limits of State-Native Memory<a class="heading-anchor" href="#limits-of-state-native-memory" aria-label="Link to this section">#</a></h2>
+<p>Machine-owned state can be exact while narrative state is wrong. An agent may write a poor Spec, fail to update Progress, record weak evidence, or choose an incoherent Tree. <span class="smallcaps">TreeWork</span> reduces ambiguity about ownership and transition but does not guarantee design quality. User review, code review, tests, and external evidence remain necessary.</p>
+<p>The Tree is also a deliberate simplification. Hierarchy gives work one primary owner, while a DAG captures prerequisites. Projects with dense many-to-many ownership may resist this representation. Excessive branch granularity can increase maintenance cost; insufficient granularity can recreate context overload inside one branch.</p>
+<p>Finally, the current system relies on explicit Agent compliance for narrative updates and tool-workdir movement after worktree creation. The transaction runtime can enforce machine invariants but cannot force a model to write an insightful Spec or move its parent process into a returned directory.</p>
+<h2 data-number="8.3" id="trajectory-engineering"><span class="header-section-number">8.3</span> Trajectory Engineering<a class="heading-anchor" href="#trajectory-engineering" aria-label="Link to this section">#</a></h2>
+<p>The project tree defines possible work locations, but the development trajectory is the sequence of accepted movements through that space. This suggests a broader engineering perspective:</p>
+<blockquote>
+<p>Context engineering determines what an agent sees at one decision point. Trajectory engineering determines how recoverable work state evolves across decision points.</p>
+</blockquote>
+<p><span class="smallcaps">TreeWork</span> is one domain-specific realization of that idea for software development. Here, <em>trajectory engineering</em> refers specifically to maintaining recoverable development state across decision points. This usage connects trajectory maintenance with state-native project memory; related uses of the term appear in control, robotics, and emerging agent practice.</p>
+<h2 data-number="8.4" id="composable-domain-specific-state-memory"><span class="header-section-number">8.4</span> Composable Domain-Specific State Memory<a class="heading-anchor" href="#composable-domain-specific-state-memory" aria-label="Link to this section">#</a></h2>
+<p><span class="smallcaps">TreeWork</span> is deliberately specialized to software development. Its Work Tree, branch lifecycle, dependency DAG, Requirements, Specs, execution documents, verification records, and accepted trajectory are useful because they determine where a coding agent may work, which design governs that work, and when the work may continue or complete. They are not a universal state schema for every agent.</p>
+<p>Other long-horizon domains expose different action-relevant state. A GUI agent may require application, page, form, permission, modal, and irreversible-action state. A research agent may require questions, hypotheses, supporting and refuting evidence, experiments, uncertainties, and an argument chain. An embodied agent may require objects, locations, relations, goals, affordances, and safety constraints. The reusable principle is therefore not that all agents share one schema, but that each domain explicitly maintains the state that changes its admissible continuation actions.</p>
+<p id="eq:routed-state-composition" class="equation-block">Let a composable memory family contain domain-specific memories <span class="math display">\[\mathfrak M_t
+  =
+  \left\{
+    M_t^{\mathrm{code}},
+    M_t^{\mathrm{GUI}},
+    M_t^{\mathrm{research}},
+    M_t^{\mathrm{embodied}},
+    \ldots
+  \right\}.\]</span> A router may use query <span class="math inline">\(q_t\)</span>, environment <span class="math inline">\(e_t\)</span>, and agent phase <span class="math inline">\(\rho_t\)</span> to select a set of relevant domains, <span class="math display">\[\mathcal R(q_t,e_t,\rho_t)
+  \longrightarrow
+  \mathfrak D_t,\]</span> then compose their deterministic projections with current environment evidence and retrieved history: <span class="math display">\[C_t
+  =
+  \operatorname{Compose}\!\left(
+    O_t,
+    \left\{
+      \Pi_{q_t}^{d}(M_t^d):d\in\mathfrak D_t
+    \right\},
+    R_k(q_t,H_t)
+  \right).\]</span> The router need not choose only one domain. A coding agent testing a web application may simultaneously require coding state for branch ownership and verification gaps, GUI state for browser position and authentication, and research state for competing bug hypotheses.<a class="equation-number" href="#eq:domain-memory-family" aria-label="Equation 40" data-paper-link="true">(40)</a><a class="equation-number" href="#eq:state-memory-router" aria-label="Equation 41" data-paper-link="true">(41)</a><a class="equation-number" href="#eq:routed-state-composition" aria-label="Equation 42" data-paper-link="true">(42)</a></p>
+<h1 data-number="9" id="conclusion"><span class="header-section-number">9</span> Conclusion<a class="heading-anchor" href="#conclusion" aria-label="Link to this section">#</a></h1>
+<p>Long-horizon coding agents need more than a partial reading of implementation outcomes plus retrieval of relevant past fragments. They need a shared, current, authoritative answer to where the project is, what the current branch owns, which design governs it, how it reached its current state, and what movement is admissible next. <span class="smallcaps">TreeWork</span> treats this as a coordination-state problem.</p>
+<p>By combining an ordered Project Tree, dependency DAG, scope-owned Specs and execution documents, protected lifecycle transitions, verification evidence, deterministic Recall, and a compact event trajectory, <span class="smallcaps">TreeWork</span> makes software development recoverable across context loss and agent handoffs. The method does not prescribe every action. It supplies the durable state space within which agents can inspect and modify code without repeatedly reconstructing project coordination state from repository fragments and conversation memory.</p>
+<p>TreeWork is one coding-domain instance of a broader state-native memory direction, not a universal schema. Other long-horizon agents require different action-relevant state spaces. Future systems may therefore comprise a family of domain-specific state models that share transaction, projection, and replay interfaces, routing queries to or composing projections from several memories according to the current environment and continuation problem.</p>
+<h1 id="references" class="unnumbered">References<a class="heading-anchor" href="#references" aria-label="Link to this section">#</a></h1><div id="refs" class="references csl-bib-body hanging-indent" role="doc-bibliography">
+<div id="ref-bouzenia2025trajectories" class="csl-entry" role="doc-biblioentry">
+Bouzenia, Islem, and Michael Pradel. 2025. <span>“Understanding Software Engineering Agents: A Study of Thought-Action-Result Trajectories.”</span> <em>arXiv Preprint arXiv:2506.18824</em>. <a href="https://arxiv.org/abs/2506.18824">https://arxiv.org/abs/2506.18824</a>.
+</div>
+<div id="ref-chao2026stale" class="csl-entry" role="doc-biblioentry">
+Chao, Hanxiang, Yihan Bai, Rui Sheng, Tianle Li, and Yushi Sun. 2026. <span>“<span>STALE</span>: Can <span>LLM</span> Agents Know When Their Memories Are No Longer Valid?”</span> <em>arXiv Preprint arXiv:2605.06527</em>. <a href="https://arxiv.org/abs/2605.06527">https://arxiv.org/abs/2605.06527</a>.
+</div>
+<div id="ref-du2026memory" class="csl-entry" role="doc-biblioentry">
+Du, Pengfei. 2026. <span>“Memory for Autonomous <span>LLM</span> Agents: Mechanisms, Evaluation, and Emerging Frontiers.”</span> <em>arXiv Preprint arXiv:2603.07670</em>. <a href="https://arxiv.org/abs/2603.07670">https://arxiv.org/abs/2603.07670</a>.
+</div>
+<div id="ref-fowler2005eventsourcing" class="csl-entry" role="doc-biblioentry">
+Fowler, Martin. 2005. <span>“Event Sourcing.”</span> <a href="https://martinfowler.com/eaaDev/EventSourcing.html">https://martinfowler.com/eaaDev/EventSourcing.html</a>.
+</div>
+<div id="ref-github2026issues" class="csl-entry" role="doc-biblioentry">
+GitHub. 2026a. <span>“About Issues.”</span> <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/about-issues">https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/about-issues</a>.
+</div>
+<div id="ref-github2026protected" class="csl-entry" role="doc-biblioentry">
+———. 2026b. <span>“About Protected Branches.”</span> <a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches">https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches</a>.
+</div>
+<div id="ref-gray1992transaction" class="csl-entry" role="doc-biblioentry">
+Gray, Jim, and Andreas Reuter. 1992. <em>Transaction Processing: Concepts and Techniques</em>. Morgan Kaufmann.
+</div>
+<div id="ref-harel1987statecharts" class="csl-entry" role="doc-biblioentry">
+Harel, David. 1987. <span>“Statecharts: A Visual Formalism for Complex Systems.”</span> <em>Science of Computer Programming</em> 8 (3): 231–74. <a href="https://doi.org/10.1016/0167-6423(87)90035-9">https://doi.org/10.1016/0167-6423(87)90035-9</a>.
+</div>
+<div id="ref-hayesroth1985blackboard" class="csl-entry" role="doc-biblioentry">
+Hayes-Roth, Barbara. 1985. <span>“A Blackboard Architecture for Control.”</span> <em>Artificial Intelligence</em> 26 (3): 251–321. <a href="https://doi.org/10.1016/0004-3702(85)90063-3">https://doi.org/10.1016/0004-3702(85)90063-3</a>.
+</div>
+<div id="ref-herlihy1990linearizability" class="csl-entry" role="doc-biblioentry">
+Herlihy, Maurice P., and Jeannette M. Wing. 1990. <span>“Linearizability: A Correctness Condition for Concurrent Objects.”</span> <em>ACM Transactions on Programming Languages and Systems</em> 12 (3): 463–92. <a href="https://doi.org/10.1145/78969.78972">https://doi.org/10.1145/78969.78972</a>.
+</div>
+<div id="ref-hong2023metagpt" class="csl-entry" role="doc-biblioentry">
+Hong, Sirui, Mingchen Zhuge, Jiaqi Chen, Xiawu Zheng, Yuheng Cheng, Ceyao Zhang, Jinlin Wang, et al. 2023. <span>“<span>MetaGPT</span>: Meta Programming for a Multi-Agent Collaborative Framework.”</span> <em>arXiv Preprint arXiv:2308.00352</em>. <a href="https://arxiv.org/abs/2308.00352">https://arxiv.org/abs/2308.00352</a>.
+</div>
+<div id="ref-jimenez2023swebench" class="csl-entry" role="doc-biblioentry">
+Jimenez, Carlos E., John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir Press, and Karthik Narasimhan. 2023. <span>“<span class="nocase">SWE-bench</span>: Can Language Models Resolve Real-World <span>GitHub</span> Issues?”</span> <em>arXiv Preprint arXiv:2310.06770</em>. <a href="https://arxiv.org/abs/2310.06770">https://arxiv.org/abs/2310.06770</a>.
+</div>
+<div id="ref-lamport2002specifying" class="csl-entry" role="doc-biblioentry">
+Lamport, Leslie. 2002. <em>Specifying Systems: The <span>TLA+</span> Language and Tools for Hardware and Software Engineers</em>. Addison-Wesley. <a href="https://lamport.azurewebsites.net/tla/book.html">https://lamport.azurewebsites.net/tla/book.html</a>.
+</div>
+<div id="ref-lebo2013provo" class="csl-entry" role="doc-biblioentry">
+Lebo, Timothy, Satya Sahoo, and Deborah McGuinness. 2013. <span>“<span>PROV-O</span>: The <span>PROV</span> Ontology.”</span> {W3C} Recommendation. World Wide Web Consortium. <a href="https://www.w3.org/TR/prov-o/">https://www.w3.org/TR/prov-o/</a>.
+</div>
+<div id="ref-lewis2020rag" class="csl-entry" role="doc-biblioentry">
+Lewis, Patrick, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Kuttler, et al. 2020. <span>“Retrieval-Augmented Generation for Knowledge-Intensive <span>NLP</span> Tasks.”</span> In <em>Advances in Neural Information Processing Systems</em>, 33:9459–74. <a href="https://papers.nips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html">https://papers.nips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html</a>.
+</div>
+<div id="ref-lu2024aiscientist" class="csl-entry" role="doc-biblioentry">
+Lu, Chris, Cong Lu, Robert Tjarko Lange, Jakob Foerster, Jeff Clune, and David Ha. 2024. <span>“The <span>AI</span> Scientist: Towards Fully Automated Open-Ended Scientific Discovery.”</span> <em>arXiv Preprint arXiv:2408.06292</em>. <a href="https://arxiv.org/abs/2408.06292">https://arxiv.org/abs/2408.06292</a>.
+</div>
+<div id="ref-nygard2011adr" class="csl-entry" role="doc-biblioentry">
+Nygard, Michael. 2011. <span>“Documenting Architecture Decisions.”</span> <a href="https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions">https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions</a>.
+</div>
+<div id="ref-packer2023memgpt" class="csl-entry" role="doc-biblioentry">
+Packer, Charles, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir G. Patil, Ion Stoica, and Joseph E. Gonzalez. 2023. <span>“<span>MemGPT</span>: Towards <span>LLMs</span> as Operating Systems.”</span> <em>arXiv Preprint arXiv:2310.08560</em>. <a href="https://arxiv.org/abs/2310.08560">https://arxiv.org/abs/2310.08560</a>.
+</div>
+<div id="ref-park2023generative" class="csl-entry" role="doc-biblioentry">
+Park, Joon Sung, Joseph C. O’Brien, Carrie J. Cai, Meredith Ringel Morris, Percy Liang, and Michael S. Bernstein. 2023. <span>“Generative Agents: Interactive Simulacra of Human Behavior.”</span> <em>arXiv Preprint arXiv:2304.03442</em>. <a href="https://arxiv.org/abs/2304.03442">https://arxiv.org/abs/2304.03442</a>.
+</div>
+<div id="ref-qian2024chatdev" class="csl-entry" role="doc-biblioentry">
+Qian, Chen, Wei Liu, Hongzhang Liu, Nuo Chen, Yufan Dang, Jiahao Li, Yang Cheng, et al. 2024. <span>“<span>ChatDev</span>: Communicative Agents for Software Development.”</span> In <em>Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics</em>, 15174–86. <a href="https://doi.org/10.18653/v1/2024.acl-long.810">https://doi.org/10.18653/v1/2024.acl-long.810</a>.
+</div>
+<div id="ref-sadowski2018review" class="csl-entry" role="doc-biblioentry">
+Sadowski, Caitlin, Emma Söderberg, Luke Church, Michal Sipko, and Alberto Bacchelli. 2018. <span>“Modern Code Review: A Case Study at Google.”</span> In <em>Proceedings of the 40th International Conference on Software Engineering: Software Engineering in Practice</em>, 181–90. <a href="https://doi.org/10.1145/3183519.3183525">https://doi.org/10.1145/3183519.3183525</a>.
+</div>
+<div id="ref-shinn2023reflexion" class="csl-entry" role="doc-biblioentry">
+Shinn, Noah, Federico Cassano, Edward Berman, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. 2023. <span>“Reflexion: Language Agents with Verbal Reinforcement Learning.”</span> <em>arXiv Preprint arXiv:2303.11366</em>. <a href="https://arxiv.org/abs/2303.11366">https://arxiv.org/abs/2303.11366</a>.
+</div>
+<div id="ref-sumers2023coala" class="csl-entry" role="doc-biblioentry">
+Sumers, Theodore R., Shunyu Yao, Karthik Narasimhan, and Thomas L. Griffiths. 2023. <span>“Cognitive Architectures for Language Agents.”</span> <em>arXiv Preprint arXiv:2309.02427</em>. <a href="https://arxiv.org/abs/2309.02427">https://arxiv.org/abs/2309.02427</a>.
+</div>
+<div id="ref-wang2023voyager" class="csl-entry" role="doc-biblioentry">
+Wang, Guanzhi, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. 2023. <span>“<span>Voyager</span>: An Open-Ended Embodied Agent with Large Language Models.”</span> <em>arXiv Preprint arXiv:2305.16291</em>. <a href="https://arxiv.org/abs/2305.16291">https://arxiv.org/abs/2305.16291</a>.
+</div>
+<div id="ref-wu2023autogen" class="csl-entry" role="doc-biblioentry">
+Wu, Qingyun, Gagan Bansal, Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li Jiang, et al. 2023. <span>“<span>AutoGen</span>: Enabling Next-Gen <span>LLM</span> Applications via Multi-Agent Conversation.”</span> <em>arXiv Preprint arXiv:2308.08155</em>. <a href="https://arxiv.org/abs/2308.08155">https://arxiv.org/abs/2308.08155</a>.
+</div>
+<div id="ref-wu2024stateflow" class="csl-entry" role="doc-biblioentry">
+Wu, Yiran, Tianwei Yue, Shaokun Zhang, Chi Wang, and Qingyun Wu. 2024. <span>“<span>StateFlow</span>: Enhancing <span>LLM</span> Task-Solving Through State-Driven Workflows.”</span> <em>arXiv Preprint arXiv:2403.11322</em>. <a href="https://arxiv.org/abs/2403.11322">https://arxiv.org/abs/2403.11322</a>.
+</div>
+<div id="ref-xie2024osworld" class="csl-entry" role="doc-biblioentry">
+Xie, Tianbao, Danyang Zhang, Jixuan Chen, Xiaochuan Li, Siheng Zhao, Ruisheng Cao, Toh Jing Hua, et al. 2024. <span>“<span>OSWorld</span>: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments.”</span> <em>arXiv Preprint arXiv:2404.07972</em>. <a href="https://arxiv.org/abs/2404.07972">https://arxiv.org/abs/2404.07972</a>.
+</div>
+<div id="ref-xu2025amem" class="csl-entry" role="doc-biblioentry">
+Xu, Wujiang, Zujie Liang, Kai Mei, Hang Gao, Juntao Tan, and Yongfeng Zhang. 2025. <span>“<span>A-MEM</span>: Agentic Memory for <span>LLM</span> Agents.”</span> <em>arXiv Preprint arXiv:2502.12110</em>. <a href="https://arxiv.org/abs/2502.12110">https://arxiv.org/abs/2502.12110</a>.
+</div>
+<div id="ref-yang2024sweagent" class="csl-entry" role="doc-biblioentry">
+Yang, John, Carlos E. Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik Narasimhan, and Ofir Press. 2024. <span>“<span class="nocase">SWE-agent</span>: Agent-Computer Interfaces Enable Automated Software Engineering.”</span> <em>arXiv Preprint arXiv:2405.15793</em>. <a href="https://arxiv.org/abs/2405.15793">https://arxiv.org/abs/2405.15793</a>.
+</div>
+<div id="ref-yao2023react" class="csl-entry" role="doc-biblioentry">
+Yao, Shunyu, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao. 2023. <span>“<span>ReAct</span>: Synergizing Reasoning and Acting in Language Models.”</span> <em>International Conference on Learning Representations</em>. <a href="https://arxiv.org/abs/2210.03629">https://arxiv.org/abs/2210.03629</a>.
+</div>
+<div id="ref-zhang2025ace" class="csl-entry" role="doc-biblioentry">
+Zhang, Qizheng, Changran Hu, Shubhangi Upasani, Boyuan Ma, Fenglu Hong, Vamsidhar Kamanuru, Jay Rainton, et al. 2025. <span>“Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models.”</span> <em>arXiv Preprint arXiv:2510.04618</em>. <a href="https://arxiv.org/abs/2510.04618">https://arxiv.org/abs/2510.04618</a>.
+</div>
+<div id="ref-zhou2023webarena" class="csl-entry" role="doc-biblioentry">
+Zhou, Shuyan, Frank F. Xu, Hao Zhu, Xuhui Zhou, Robert Lo, Abishek Sridhar, Xianyi Cheng, et al. 2023. <span>“<span>WebArena</span>: A Realistic Web Environment for Building Autonomous Agents.”</span> <em>arXiv Preprint arXiv:2307.13854</em>. <a href="https://arxiv.org/abs/2307.13854">https://arxiv.org/abs/2307.13854</a>.
+</div>
+</div>
