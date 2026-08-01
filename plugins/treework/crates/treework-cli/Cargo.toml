@@ -1,6 +1,6 @@
 [package]
 name = "treework-cli"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Zhongxuan Song <universeszym@mail.ustc.edu.cn>"]
 description = "TreeWork state, transaction, and Project Map runtime"

@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.1.6 - Atomic macOS Upgrade Publication
+
+- Publishes the rebuilt CLI through a fresh sibling file and atomic rename
+  instead of overwriting an existing plugin-data executable in place.
+- Prevents macOS Gatekeeper from retaining a stale execution decision across a
+  Codex Marketplace plugin upgrade.
+- Adds regression coverage proving an existing CLI destination receives a new
+  filesystem identity and leaves no temporary publication file behind.
+
 ## v0.1.5 - macOS Quarantine-Safe Bootstrap
 
 - Prevents macOS Gatekeeper from terminating Cargo-generated executable build
