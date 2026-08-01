@@ -91,6 +91,11 @@ input:focus-visible,
   min-height: 100vh;
   --reader-width: 760px;
   --body-size: 18px;
+  --occupied-rail-width: 0px;
+}
+
+.reader-shell.has-left-rail {
+  --occupied-rail-width: var(--left-rail);
 }
 
 .reader-shell[data-measure="compact"] {
@@ -420,17 +425,46 @@ kbd {
 
 .paper-edition {
   display: flex;
-  gap: 10px;
-  margin-bottom: 35px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 30px;
   color: var(--faint);
-  font: 9.5px var(--mono);
+  font: 500 9.5px var(--mono);
   text-transform: uppercase;
 }
 
-.paper-edition span + span::before {
-  margin-right: 10px;
-  color: var(--vein);
-  content: "/";
+.paper-edition-identity,
+.paper-edition-tags,
+.paper-edition-tags span {
+  display: flex;
+  align-items: center;
+}
+
+.paper-edition-identity {
+  gap: 9px;
+  color: var(--ink-soft);
+}
+
+.paper-edition-identity img {
+  width: 28px;
+  height: 28px;
+}
+
+.paper-edition-tags {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.paper-edition-tags span {
+  min-height: 25px;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--vein);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--paper);
 }
 
 .paper-article {
@@ -629,7 +663,7 @@ kbd {
 }
 
 .paper-article figure {
-  width: min(1120px, calc(100vw - var(--left-rail) - var(--right-rail) - 70px));
+  width: min(1120px, calc(100vw - var(--occupied-rail-width) - 70px));
   margin: 52px 50% 58px;
   transform: translateX(-50%);
 }
@@ -1028,7 +1062,7 @@ kbd {
 @media (max-width: 1120px) {
   .paper-article figure,
   .table-scroll {
-    width: min(100%, calc(100vw - var(--left-rail) - 62px));
+    width: min(100%, calc(100vw - var(--occupied-rail-width) - 62px));
   }
 }
 
@@ -1059,6 +1093,11 @@ kbd {
 @media (max-width: 759px) {
   :root {
     --topbar-height: 52px;
+  }
+
+  .reader-shell,
+  .reader-shell.has-left-rail {
+    --occupied-rail-width: 0px;
   }
 
   .reader-topbar {
@@ -1110,7 +1149,26 @@ kbd {
   }
 
   .paper-edition {
+    align-items: flex-start;
     margin-bottom: 26px;
+  }
+
+  .paper-edition-identity span {
+    display: none;
+  }
+
+  .paper-edition-tags {
+    gap: 5px;
+  }
+
+  .paper-edition-tags span {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 8.5px;
+  }
+
+  .paper-edition-tags span:first-child {
+    padding-left: 6px;
   }
 
   .paper-article {

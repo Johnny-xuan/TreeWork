@@ -461,9 +461,18 @@ export function App() {
 
       <main className="reader-main" id="top">
         <div className="paper-edition">
-          <span>System paper</span>
-          <span>{PAPER_VERSION}</span>
-          <span>2026</span>
+          <div className="paper-edition-identity">
+            <img src={treeworkIcon} alt="" />
+            <span>TreeWork Research</span>
+          </div>
+          <div className="paper-edition-tags" aria-label="Paper metadata">
+            <span>
+              <BookOpen size={12} />
+              System paper
+            </span>
+            <span>{PAPER_VERSION}</span>
+            <span>2026</span>
+          </div>
         </div>
         <article
           ref={articleRef}
