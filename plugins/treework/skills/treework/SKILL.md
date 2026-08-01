@@ -1,11 +1,11 @@
 ---
 name: treework
-description: Use TreeWork, a state-native project memory plugin for complex or evolving software projects that need staged alignment, pre-coding technical Specs, declarative project-tree planning, branch-scoped Git worktrees, durable recovery, and protected completion. It teaches the Agent to move through development along the Tree instead of jumping between unrelated tasks.
+description: Use TreeWork, a tree-guided development plugin for complex or evolving software projects that need staged alignment, pre-coding technical Specs, declarative project-tree planning, branch-scoped Git worktrees, durable recovery, and protected completion. It teaches the Agent to move through development along the Tree instead of jumping between unrelated tasks.
 ---
 
 # TreeWork
 
-TreeWork is a state-native project memory plugin. It externalizes accepted
+TreeWork is a tree-guided development plugin. It externalizes accepted
 project organization, design, branch-local reality, verification, and
 development trajectory so an Agent does not have to reconstruct them from
 partial code inspection or retrieved history. The Project Tree is its

@@ -8,15 +8,16 @@
 
 # TreeWork
 
-TreeWork is a **Codex plugin for state-native project memory**: an explicit,
-queryable record of accepted project organization, design, branch-local
-reality, verification, and development trajectory.
+TreeWork is a **tree-guided development plugin for Codex**. It helps coding
+agents organize complex projects as branches, prepare the important design
+before coding, and move through long-running work without losing direction.
 
 Code inspection shows what exists and retrieval memory recalls fragments, but
 neither reliably tells an Agent what the project has accepted, where work
-stands, or why it stopped. TreeWork keeps that operational state outside the
-model context so long-running work can resume without reconstructing the
-project from scratch.
+stands, or why it stopped. TreeWork therefore keeps the accepted project
+structure, branch state, Specs, progress, findings, and verification outside
+the model context so work can resume without reconstructing the project from
+scratch.
 
 ## First Install
 
