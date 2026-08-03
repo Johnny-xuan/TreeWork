@@ -50,9 +50,18 @@ notes into the Tree document. Do not describe procedural operations such as
 `move`, `rename`, or `split`; move the stable node, edit its metadata, or add
 children so Apply can derive the semantic change.
 
-Create or revise `.TreeWork/branches/<branch>/spec.md` for implementation
-branches with meaningful local design. A purely organizational branch needs a
-Spec only when it adds shared technical direction for descendants.
+Create or revise the branch's `spec.md` for implementation branches with
+meaningful local design. Branch documents physically follow the accepted parent
+chain. For example, branch `api` under `platform` owns
+`.TreeWork/branches/platform/api/spec.md`, alongside its Plan, Progress,
+Findings, and Verification. A purely organizational branch needs a Spec only
+when it adds shared technical direction for descendants.
+
+The branch ID remains its stable command and dependency identity; its document
+directory is a projection of Tree hierarchy. Do not invent or separately
+maintain directory mappings. When a branch moves, edit its nesting and canonical
+`spec` path in `tree.yaml`; Apply moves the branch's complete document subtree
+as part of the same protected transaction.
 
 Read `tree-yaml.md` when the exact Agent-facing YAML fields and editing language
 matter. The corresponding machine-readable shape is
@@ -64,9 +73,10 @@ After review, apply the complete candidate as one transaction. There is no
 normal preview step.
 
 Apply parses typed YAML, validates IDs, references, parent and dependency cycles,
-Spec paths, protected history, and the accepted base revision. It computes the
-semantic diff, scaffolds valid new branch documents, and commits state,
-transaction event, managed blocks, and projection metadata atomically.
+canonical Spec paths, artifact destinations, protected history, and the accepted
+base revision. It computes the semantic diff, moves affected branch-document
+subtrees, scaffolds valid new branch documents, and commits state, transaction
+event, managed blocks, and projection metadata atomically.
 
 If validation fails, it reports the YAML path and location when available,
 changes no accepted state, and leaves the editing session open. Fix the

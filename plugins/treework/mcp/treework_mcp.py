@@ -216,12 +216,6 @@ def pick_branch(workspace: Path, arguments: dict[str, Any] | None) -> str:
     return current if isinstance(current, str) and current else "root"
 
 
-def branch_doc_dir(tw_dir: Path, branch: str) -> Path:
-    if branch == "root":
-        return tw_dir
-    return tw_dir / "branches" / branch
-
-
 def related_edges(edges: list[dict[str, Any]], branch: str) -> list[dict[str, Any]]:
     return [
         edge

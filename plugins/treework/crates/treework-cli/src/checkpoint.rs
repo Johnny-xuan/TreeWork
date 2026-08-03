@@ -338,6 +338,7 @@ mod tests {
             schema_version: "0.1".to_string(),
             stage: "alignment".to_string(),
             current_branch: "root".to_string(),
+            artifact_layout_version: crate::branch_artifacts::HIERARCHICAL_LAYOUT,
             last_event_seq: 1,
             tree_revision: 0,
             tree_editing: None::<TreeEditingSession>,

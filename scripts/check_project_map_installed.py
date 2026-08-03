@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from _paths import PLUGIN_ROOT, REPOSITORY_ROOT
+from _paths import PLUGIN_ROOT, REPOSITORY_ROOT, branch_artifact_dir
 from check_mcp import (
     McpClient,
     accepted_state_snapshot,
@@ -145,7 +145,7 @@ tree:
 
 def complete_branch(workspace: Path, build_dir: Path, branch: str) -> None:
     run_tw(workspace, build_dir, "enter", branch, "--no-isolate")
-    plan = workspace / ".TreeWork" / "branches" / branch / "task_plan.md"
+    plan = branch_artifact_dir(workspace, branch) / "task_plan.md"
     plan.write_text(
         plan.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
         encoding="utf-8",

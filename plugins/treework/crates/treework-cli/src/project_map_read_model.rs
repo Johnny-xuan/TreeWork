@@ -10,6 +10,10 @@ use std::sync::{Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[cfg(test)]
+use crate::branch_artifacts::HIERARCHICAL_LAYOUT;
+use crate::branch_artifacts::{BranchArtifactLayout, BranchArtifactNode, LEGACY_FLAT_LAYOUT};
+
 const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_DOCUMENT_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_EVENT_TAIL_BYTES: u64 = 1024 * 1024;
@@ -213,11 +217,17 @@ struct StrictProject {
     schema_version: String,
     stage: String,
     current_branch: String,
+    #[serde(default = "default_artifact_layout_version")]
+    artifact_layout_version: u32,
     last_event_seq: u64,
     tree_revision: u64,
     tree_editing: Option<StrictTreeEditing>,
     tree_hash: String,
     last_sync: String,
+}
+
+fn default_artifact_layout_version() -> u32 {
+    LEGACY_FLAT_LAYOUT
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -1324,6 +1334,14 @@ fn read_narratives(
     project: &StrictProject,
     branches: &[StrictBranch],
 ) -> ReadResult<NarrativeSet> {
+    let layout = BranchArtifactLayout::build(
+        project.artifact_layout_version,
+        branches.iter().map(|branch| BranchArtifactNode {
+            id: branch.path.clone(),
+            parent: branch.parent.clone(),
+        }),
+    )
+    .map_err(|error| ReadModelError(format!("invalid branch artifact layout: {error}")))?;
     let mut ordered: Vec<&StrictBranch> = branches.iter().collect();
     if project.tree_revision == 0 {
         ordered.retain(|branch| branch.path == "root");
@@ -1334,7 +1352,7 @@ fn read_narratives(
     let mut managed_watch_roots = BTreeSet::new();
 
     for branch in ordered {
-        let source = document_source(root, treework, branch);
+        let source = document_source(root, treework, &layout, branch)?;
         if source.managed {
             managed_watch_roots.insert(source.base.clone());
         }
@@ -1369,25 +1387,33 @@ struct DocumentSource {
     managed: bool,
 }
 
-fn document_source(root: &Path, treework: &Path, branch: &StrictBranch) -> DocumentSource {
+fn document_source(
+    root: &Path,
+    treework: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &StrictBranch,
+) -> ReadResult<DocumentSource> {
     if branch.path != "root" {
-        if let Some(source) = validated_managed_document_source(root, branch) {
-            return source;
+        if let Some(source) = validated_managed_document_source(root, layout, branch) {
+            return Ok(source);
         }
     }
-    let relative_dir = if branch.path == "root" {
-        PathBuf::new()
-    } else {
-        PathBuf::from("branches").join(&branch.path)
-    };
-    DocumentSource {
+    let relative_dir = layout
+        .relative_dir(&branch.path)
+        .map_err(|error| ReadModelError(error.to_string()))?
+        .to_path_buf();
+    Ok(DocumentSource {
         base: treework.to_path_buf(),
         relative_dir,
         managed: false,
-    }
+    })
 }
 
-fn validated_managed_document_source(root: &Path, branch: &StrictBranch) -> Option<DocumentSource> {
+fn validated_managed_document_source(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &StrictBranch,
+) -> Option<DocumentSource> {
     let isolation = branch.isolation.as_ref()?;
     if isolation.mode != "git-worktree"
         || !isolation.managed_by_treework
@@ -1420,7 +1446,7 @@ fn validated_managed_document_source(root: &Path, branch: &StrictBranch) -> Opti
     let treework = fs::canonicalize(workspace.join(".TreeWork")).ok()?;
     Some(DocumentSource {
         base: treework,
-        relative_dir: PathBuf::from("branches").join(&branch.path),
+        relative_dir: layout.relative_dir(&branch.path).ok()?.to_path_buf(),
         managed: true,
     })
 }
@@ -2148,6 +2174,7 @@ pub(crate) mod test_support {
 mod tests {
     use super::test_support::{write_json, TestFixture};
     use super::*;
+    use serde_json::Value;
     use std::process::Command;
 
     #[test]
@@ -2181,6 +2208,81 @@ mod tests {
             "Contract body."
         );
         assert_eq!(detail.verification.coverage_gap, "None.");
+    }
+
+    #[test]
+    fn hierarchical_layout_reads_nested_branch_narratives() {
+        let fixture = TestFixture::accepted();
+        let project_path = fixture.root.join(".TreeWork/state/project.json");
+        let mut project: Value =
+            serde_json::from_str(&fs::read_to_string(&project_path).expect("project source"))
+                .expect("project JSON");
+        project["artifact_layout_version"] = json!(HIERARCHICAL_LAYOUT);
+        write_json(&project_path, &project);
+
+        let branches_path = fixture.root.join(".TreeWork/state/branches.json");
+        let mut branches: Value =
+            serde_json::from_str(&fs::read_to_string(&branches_path).expect("branches source"))
+                .expect("branches JSON");
+        let feature = branches["branches"]
+            .as_array_mut()
+            .expect("branch array")
+            .iter_mut()
+            .find(|branch| branch["path"] == "feature")
+            .expect("feature branch");
+        feature["parent"] = json!("foundation");
+        write_json(&branches_path, &branches);
+
+        let tree_path = fixture.root.join(".TreeWork/state/tree.json");
+        let mut tree: StrictAcceptedTree = read_strict_json(&tree_path).expect("accepted tree");
+        let feature = tree
+            .nodes
+            .iter_mut()
+            .find(|node| node.id == "feature")
+            .expect("feature node");
+        feature.parent = "foundation".to_string();
+        feature.spec = Some("branches/foundation/feature/spec.md".to_string());
+        tree.state_hash = strict_tree_state_hash(&tree).expect("tree hash");
+        write_json(
+            &tree_path,
+            &serde_json::to_value(&tree).expect("tree value"),
+        );
+
+        let graph_path = fixture.root.join(".TreeWork/state/graph.json");
+        let mut graph: Value =
+            serde_json::from_str(&fs::read_to_string(&graph_path).expect("graph source"))
+                .expect("graph JSON");
+        let edge = graph["edges"]
+            .as_array_mut()
+            .expect("edge array")
+            .iter_mut()
+            .find(|edge| edge["kind"] == "parent_of" && edge["to"] == "feature")
+            .expect("feature parent edge");
+        edge["from"] = json!("foundation");
+        write_json(&graph_path, &graph);
+
+        let old = fixture.root.join(".TreeWork/branches/feature");
+        let nested = fixture.root.join(".TreeWork/branches/foundation/feature");
+        fs::rename(&old, &nested).expect("nest feature documents");
+
+        let store = fixture.store();
+        let _ = store.refresh();
+        assert_eq!(
+            store
+                .projection()
+                .expect("hierarchical projection")
+                .health
+                .status,
+            "ok"
+        );
+        assert_eq!(
+            store
+                .branch_detail("feature")
+                .expect("feature detail")
+                .progress
+                .current_reality,
+            "initial feature reality"
+        );
     }
 
     #[test]

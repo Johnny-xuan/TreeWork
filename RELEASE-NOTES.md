@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.1.7 - Hierarchical Branch Artifacts
+
+- Projects branch documents onto the same parent-child hierarchy as the
+  accepted Tree, keeping each branch's Spec, Plan, Progress, Findings,
+  Verification, and auxiliary evidence together.
+- Migrates the legacy flat layout on the first protected mutation while keeping
+  read-only Recall and Project Map compatible before migration.
+- Moves parent branches and all descendants atomically during Tree Apply, with
+  journaled rollback and collision, cycle, escape, and symlink validation.
+- Routes CLI lifecycle operations, managed worktrees, Recall, Project Map, MCP,
+  and release fixtures through one shared branch-artifact resolver.
+
 ## v0.1.6 - Atomic macOS Upgrade Publication
 
 - Publishes the rebuilt CLI through a fresh sibling file and atomic rename

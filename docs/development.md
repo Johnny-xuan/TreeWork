@@ -72,6 +72,9 @@ python3 /path/to/skill-creator/scripts/quick_validate.py \
 - Edit Agent workflow guidance under the plugin Skill.
 - Edit developer contracts under `docs/`.
 - Do not manually edit `.TreeWork/state/` or managed progress blocks.
+- Do not construct flat `.TreeWork/branches/<branch-id>/` paths in runtime or
+  tests. Resolve branch artifacts from the accepted semantic Tree so nested
+  branches and legacy layout migration share one contract.
 
 Run `make test` for the normal suite and `make validate` for release-facing
 structure and packaging checks.

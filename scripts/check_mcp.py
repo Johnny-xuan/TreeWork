@@ -278,7 +278,7 @@ tree:
         - id: mcp-sample
           title: MCP Sample
           purpose: Branch used for MCP recall checks.
-          spec: branches/mcp-sample/spec.md
+          spec: branches/mcp-ready/mcp-sample/spec.md
           depends_on:
             - mcp-ready
 """,

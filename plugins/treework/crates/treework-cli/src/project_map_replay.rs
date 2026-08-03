@@ -90,11 +90,17 @@ struct ReplayMarker {
     schema_version: String,
     stage: String,
     current_branch: String,
+    #[serde(default = "default_artifact_layout_version")]
+    artifact_layout_version: u32,
     last_event_seq: u64,
     tree_revision: u64,
     tree_editing: Option<TreeEditingSession>,
     tree_hash: String,
     last_sync: String,
+}
+
+fn default_artifact_layout_version() -> u32 {
+    crate::branch_artifacts::LEGACY_FLAT_LAYOUT
 }
 
 #[derive(Clone, Debug)]
@@ -1410,6 +1416,7 @@ mod tests {
             schema_version: "0.1".to_string(),
             stage: stage.to_string(),
             current_branch: current_branch.to_string(),
+            artifact_layout_version: crate::branch_artifacts::HIERARCHICAL_LAYOUT,
             last_event_seq,
             tree_revision,
             tree_editing: None,

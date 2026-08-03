@@ -33,6 +33,9 @@ These files live under
 - [Transaction and projection](architecture/transaction-projection.md) defines
   publication, events, checkpoints, coherent reads, watchers, and Replay
   reconstruction.
+- [Hierarchical branch artifacts](architecture/hierarchical-branch-artifacts.md)
+  defines the Tree-derived document layout, legacy migration, subtree moves,
+  and rollback contract.
 
 ## Contributors
 
