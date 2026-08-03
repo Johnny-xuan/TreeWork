@@ -13,6 +13,7 @@ use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod branch_artifacts;
 mod checkpoint;
 mod event;
 mod project_map_read_model;
