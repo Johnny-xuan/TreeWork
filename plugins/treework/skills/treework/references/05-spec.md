@@ -34,8 +34,10 @@ Use `.TreeWork/spec.md` for project-level development thinking. It explains the
 overall technical direction, important modules or phases, their relationships,
 and the intended development approach.
 
-Use `.TreeWork/branches/<branch>/spec.md` for the concrete development thinking
-that belongs to one implementation branch. A branch Spec inherits the relevant
+Use the branch directory's `spec.md` for the concrete development thinking that
+belongs to one implementation branch. The directory follows the accepted Tree:
+branch `api` under `platform` uses
+`.TreeWork/branches/platform/api/spec.md`. A branch Spec inherits the relevant
 project direction without copying unrelated global or sibling detail. A purely
 organizational branch needs its own Spec only when it adds shared technical
 direction for descendants.
@@ -59,8 +61,9 @@ relationship. This is normal. Spec-first means design before code, not a rigid
 `finish every Spec -> generate Tree` sequence.
 
 Keep Tree nodes concise. Do not copy branch Spec bodies into `purpose`; use the
-node's `spec` path and standard branch directory to locate Spec, Plan, Progress,
-Findings, and Verification.
+node's canonical `spec` path and hierarchy-derived branch directory to locate
+Spec, Plan, Progress, Findings, and Verification. The branch ID is stable even
+when its parent changes; Tree Apply relocates the complete document subtree.
 
 Choose a tree shape that fits the actual project. Module-first and phase-then-
 module are common, but TreeWork does not impose a branch-granularity algorithm.

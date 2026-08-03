@@ -246,9 +246,9 @@ make validate
 
 ## 当前状态
 
-`v0.1.6` 是当前版本。Alignment、声明式 Tree 构建、受保护的 branch 移动、
-Recall、Project Map 和 Replay 已经形成可用的端到端闭环。Project Map 的交互
-设计仍会持续演化。
+`v0.1.7` 是当前版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的 branch
+文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成可用的
+端到端闭环。Project Map 的交互设计仍会持续演化。
 
 ## 隐私
 

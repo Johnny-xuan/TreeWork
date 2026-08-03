@@ -4833,13 +4833,53 @@ fn extract_coverage_gap(markdown: &str) -> String {
 
 fn read_branch_docs(root: &Path, branch_path: &str) -> AppResult<BranchDocs> {
     let dir = read_docs_dir_for_branch(root, branch_path)?;
+    let spec_path = legacy_spec_path(root, branch_path)?.unwrap_or_else(|| dir.join("spec.md"));
     Ok(BranchDocs {
-        spec: read_to_string(&dir.join("spec.md")).unwrap_or_default(),
+        spec: read_to_string(&spec_path).unwrap_or_default(),
         task_plan: read_to_string(&dir.join("task_plan.md")).unwrap_or_default(),
         progress: read_to_string(&dir.join("progress.md")).unwrap_or_default(),
         findings: read_to_string(&dir.join("findings.md")).unwrap_or_default(),
         verification: read_to_string(&dir.join("verification.md")).unwrap_or_default(),
     })
+}
+
+fn legacy_spec_path(root: &Path, branch: &str) -> AppResult<Option<PathBuf>> {
+    let project = load_project(root)?;
+    if project.artifact_layout_version != LEGACY_FLAT_LAYOUT || !accepted_tree_path(root).exists() {
+        return Ok(None);
+    }
+    let accepted = load_accepted_tree(root)?;
+    let Some(relative) = accepted
+        .nodes
+        .iter()
+        .find(|node| node.id == branch)
+        .and_then(|node| node.spec.as_deref())
+    else {
+        return Ok(None);
+    };
+    let mut workspaces = Vec::new();
+    if invocation().branch.as_deref() == Some(branch) {
+        workspaces.push(invocation().workspace_root.clone());
+    }
+    if let Some(item) = load_branches(root)?
+        .into_iter()
+        .find(|item| item.path == branch && !item.isolation.workspace_path.trim().is_empty())
+    {
+        let workspace = Path::new(&item.isolation.workspace_path);
+        if let Ok(workspace) = validate_managed_worktree(root, branch, workspace) {
+            workspaces.push(workspace);
+        }
+    }
+    workspaces.push(root.to_path_buf());
+    workspaces.dedup();
+    for workspace in workspaces {
+        validate_spec_target(&workspace, relative)?;
+        let candidate = tw_dir(&workspace).join(relative);
+        if candidate.exists() {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
 }
 
 fn push_doc_section(content: &mut String, title: &str, body: &str) {

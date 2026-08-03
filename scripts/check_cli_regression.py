@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from _paths import PLUGIN_ROOT
+from _paths import PLUGIN_ROOT, branch_artifact_dir
 
 TW = PLUGIN_ROOT / "skills" / "treework" / "scripts" / "tw"
 
@@ -185,7 +185,7 @@ def assert_full_init_scaffold(workspace: Path) -> None:
 
 
 def assert_branch_documents(workspace: Path, branch: str, custom_spec: str) -> None:
-    branch_dir = workspace / ".TreeWork" / "branches" / branch
+    branch_dir = branch_artifact_dir(workspace, branch)
     missing = [
         name
         for name in [
@@ -209,7 +209,7 @@ def write_tree(workspace: Path, source: str) -> None:
 
 
 def complete_acceptance(workspace: Path, branch: str) -> None:
-    path = workspace / ".TreeWork" / "branches" / branch / "task_plan.md"
+    path = branch_artifact_dir(workspace, branch) / "task_plan.md"
     content = path.read_text(encoding="utf-8")
     if "- [ ]" not in content:
         fail(f"{branch} task plan has no acceptance checkbox")
@@ -734,7 +734,7 @@ tree:
     - id: gamma
       title: Gamma
       purpose: Exercise atomic apply rollback.
-      spec: design/gamma.md
+      spec: branches/gamma/spec.md
 """,
     )
     before_state = project_state(workspace)
@@ -756,12 +756,12 @@ tree:
         fail("failed tree apply did not restore events")
     if (tw_dir / "state" / "tree.json").read_text(encoding="utf-8") != before_tree:
         fail("failed tree apply did not restore accepted Tree state")
-    if (tw_dir / "design" / "gamma.md").exists():
+    if (tw_dir / "branches" / "gamma" / "spec.md").exists():
         fail("failed tree apply left a newly scaffolded custom Spec behind")
     run(workspace, build_dir, "tree", "apply")
     if branch_state(workspace, "gamma")["parent"] != "root":
         fail("successful tree apply did not create gamma")
-    if not (tw_dir / "design" / "gamma.md").is_file():
+    if not (tw_dir / "branches" / "gamma" / "spec.md").is_file():
         fail("successful tree apply did not scaffold a custom Spec path")
 
     unchanged_revision = project_state(workspace)["tree_revision"]
@@ -800,11 +800,11 @@ tree:
         - id: alpha
           title: Alpha
           purpose: Exercise completion and recovery.
-          spec: branches/alpha/spec.md
+          spec: branches/beta/alpha/spec.md
     - id: gamma
       title: Gamma
       purpose: Exercise atomic apply rollback.
-      spec: design/gamma.md
+      spec: branches/gamma/spec.md
 """,
     )
     protected = run(workspace, build_dir, "tree", "apply", expect_ok=False)
@@ -1132,6 +1132,185 @@ def durable_treework_snapshot(workspace: Path) -> dict[str, bytes]:
     return snapshot
 
 
+def check_hierarchical_artifact_relocation(temp_root: Path, build_dir: Path) -> None:
+    workspace = temp_root / "hierarchical-artifact-relocation"
+    workspace.mkdir()
+    run(workspace, build_dir, "init")
+    run(workspace, build_dir, "align", "end")
+    run(workspace, build_dir, "tree", "start")
+    write_tree(
+        workspace,
+        """version: 1
+tree:
+  id: root
+  title: Hierarchical Artifacts
+  purpose: Verify semantic parent movement on disk.
+  spec: spec.md
+  children:
+    - id: platform
+      title: Platform
+      purpose: Own platform work.
+      spec: branches/platform/spec.md
+      children:
+        - id: api/v2
+          title: API V2
+          purpose: Own versioned API work.
+          spec: branches/platform/api%2Fv2/spec.md
+    - id: target
+      title: Target
+      purpose: Receive the moved subtree.
+""",
+    )
+    run(workspace, build_dir, "tree", "apply")
+    platform_before = branch_artifact_dir(workspace, "platform")
+    api_before = branch_artifact_dir(workspace, "api/v2")
+    (platform_before / "platform-evidence.txt").write_text("platform evidence\n", encoding="utf-8")
+    (api_before / "api-evidence.txt").write_text("api evidence\n", encoding="utf-8")
+
+    run(workspace, build_dir, "tree", "update")
+    write_tree(
+        workspace,
+        """version: 1
+tree:
+  id: root
+  title: Hierarchical Artifacts
+  purpose: Verify semantic parent movement on disk.
+  spec: spec.md
+  children:
+    - id: target
+      title: Target
+      purpose: Receive the moved subtree.
+      children:
+        - id: platform
+          title: Platform
+          purpose: Own platform work.
+          spec: branches/target/platform/spec.md
+          children:
+            - id: api/v2
+              title: API V2
+              purpose: Own versioned API work.
+              spec: branches/target/platform/api%2Fv2/spec.md
+""",
+    )
+    before_failure = durable_treework_snapshot(workspace)
+    run(
+        workspace,
+        build_dir,
+        "tree",
+        "apply",
+        expect_ok=False,
+        extra_env={"TREEWORK_TEST_FAILPOINT": "tree-apply-after-artifact-relocation"},
+    )
+    if durable_treework_snapshot(workspace) != before_failure:
+        fail("artifact relocation failure did not restore exact paths and bytes")
+    if not platform_before.is_dir() or not api_before.is_dir():
+        fail("artifact relocation rollback did not restore the old subtree")
+    assert_no_pending_transaction(workspace)
+
+    previous_revision = project_state(workspace)["tree_revision"]
+    run(workspace, build_dir, "tree", "apply")
+    if project_state(workspace)["tree_revision"] != previous_revision + 1:
+        fail("artifact parent move did not advance the Tree revision")
+    platform_after = branch_artifact_dir(workspace, "platform")
+    api_after = branch_artifact_dir(workspace, "api/v2")
+    if platform_after != workspace / ".TreeWork/branches/target/platform":
+        fail(f"platform resolved to the wrong hierarchy: {platform_after}")
+    if api_after != workspace / ".TreeWork/branches/target/platform/api%2Fv2":
+        fail(f"API resolved to the wrong hierarchy: {api_after}")
+    if (platform_after / "platform-evidence.txt").read_text(encoding="utf-8") != "platform evidence\n":
+        fail("parent movement lost platform evidence")
+    if (api_after / "api-evidence.txt").read_text(encoding="utf-8") != "api evidence\n":
+        fail("parent movement lost descendant evidence")
+    if platform_before.exists() or api_before.exists():
+        fail("parent movement left stale branch artifact directories")
+
+
+def check_flat_artifact_layout_migration(temp_root: Path, build_dir: Path) -> None:
+    workspace = temp_root / "flat-artifact-layout-migration"
+    workspace.mkdir()
+    run(workspace, build_dir, "init")
+    run(workspace, build_dir, "align", "end")
+    run(workspace, build_dir, "tree", "start")
+    write_tree(
+        workspace,
+        """version: 1
+tree:
+  id: root
+  title: Flat Migration
+  purpose: Reproduce the TreeWork 0.1.6 split artifact layout.
+  spec: spec.md
+  children:
+    - id: platform
+      title: Platform
+      purpose: Own the parent branch.
+      spec: branches/platform/spec.md
+      children:
+        - id: child
+          title: Child
+          purpose: Own the nested branch.
+          spec: branches/platform/child/spec.md
+""",
+    )
+    run(workspace, build_dir, "tree", "apply")
+    nested = branch_artifact_dir(workspace, "child")
+    (nested / "evidence.txt").write_text("legacy evidence\n", encoding="utf-8")
+    flat = workspace / ".TreeWork/branches/child"
+    flat.mkdir()
+    for name in ["task_plan.md", "progress.md", "findings.md", "verification.md", "evidence.txt"]:
+        shutil.move(str(nested / name), flat / name)
+    if not (nested / "spec.md").is_file():
+        fail("legacy split fixture lost its nested custom Spec")
+    with (flat / "progress.md").open("a", encoding="utf-8") as output:
+        output.write("\nLegacy flat narrative marker.\n")
+    with (nested / "spec.md").open("a", encoding="utf-8") as output:
+        output.write("\nLegacy custom Spec marker.\n")
+
+    project_path = workspace / ".TreeWork/state/project.json"
+    legacy_project = load_json(project_path)
+    legacy_project.pop("artifact_layout_version", None)
+    project_path.write_text(json.dumps(legacy_project, indent=2) + "\n", encoding="utf-8")
+    legacy_recall = json.loads(
+        run(workspace, build_dir, "recall", "child", "--json").stdout
+    )
+    if (
+        "Legacy flat narrative marker." not in legacy_recall.get("docs", {}).get("progress", "")
+        or "Legacy custom Spec marker." not in legacy_recall.get("docs", {}).get("spec", "")
+        or load_json(project_path).get("artifact_layout_version") is not None
+    ):
+        fail("read-only Recall did not understand the legacy split artifact layout")
+    before = durable_treework_snapshot(workspace)
+    run(
+        workspace,
+        build_dir,
+        "sync",
+        expect_ok=False,
+        extra_env={"TREEWORK_TEST_FAILPOINT": "artifact-migration-after-relocation"},
+    )
+    if durable_treework_snapshot(workspace) != before:
+        fail("flat-layout migration failure did not restore exact legacy bytes and paths")
+    if not flat.is_dir() or not (nested / "spec.md").is_file():
+        fail("flat-layout migration rollback did not restore the split legacy layout")
+    assert_no_pending_transaction(workspace)
+
+    before_seq = legacy_project["last_event_seq"]
+    before_revision = legacy_project["tree_revision"]
+    run(workspace, build_dir, "sync")
+    migrated = project_state(workspace)
+    if (
+        migrated.get("artifact_layout_version") != 2
+        or migrated["last_event_seq"] != before_seq
+        or migrated["tree_revision"] != before_revision
+    ):
+        fail("flat-layout migration changed semantic project state")
+    migrated_child = branch_artifact_dir(workspace, "child")
+    if migrated_child != workspace / ".TreeWork/branches/platform/child":
+        fail(f"flat-layout migration published the wrong child path: {migrated_child}")
+    if (migrated_child / "evidence.txt").read_text(encoding="utf-8") != "legacy evidence\n":
+        fail("flat-layout migration lost branch-owned evidence")
+    if not (migrated_child / "spec.md").is_file() or flat.exists():
+        fail("flat-layout migration did not reunify Spec and branch documents")
+
+
 def check_publication_recovery(temp_root: Path, build_dir: Path) -> None:
     for point in [
         "transaction-after-checkpoint",
@@ -1293,7 +1472,7 @@ tree:
     - id: beta
       title: Beta
       purpose: Failure boundary candidate.
-      spec: design/beta.md
+      spec: branches/beta/spec.md
 """,
     )
     before = durable_treework_snapshot(workspace)
@@ -1315,7 +1494,7 @@ tree:
             fail(f"Apply failure at {point} did not restore exact prior bytes")
         if (
             (workspace / ".TreeWork" / "branches" / "beta").exists()
-            or (workspace / ".TreeWork" / "design" / "beta.md").exists()
+            or (workspace / ".TreeWork" / "branches" / "beta" / "spec.md").exists()
         ):
             fail(f"Apply failure at {point} left new branch or custom Spec documents")
         assert_no_pending_transaction(workspace)
@@ -1337,7 +1516,7 @@ tree:
     assert_typed_event(marker_event, "tree.applied")
     if not (workspace / ".TreeWork" / marker_event["data"]["snapshot_ref"]).is_file():
         fail("post-marker forward recovery lost its checkpoint")
-    assert_branch_documents(workspace, "beta", "design/beta.md")
+    assert_branch_documents(workspace, "beta", "branches/beta/spec.md")
     assert_no_pending_transaction(workspace)
 
     run(workspace, build_dir, "tree", "update")
@@ -1357,11 +1536,11 @@ tree:
     - id: beta
       title: Beta
       purpose: Failure boundary candidate.
-      spec: design/beta.md
+      spec: branches/beta/spec.md
     - id: gamma
       title: Gamma
       purpose: Crash recovery candidate.
-      spec: design/gamma.md
+      spec: branches/gamma/spec.md
 """,
     )
     before_crash = durable_treework_snapshot(workspace)
@@ -1380,7 +1559,7 @@ tree:
         fail("startup recovery did not exactly roll back a pre-marker crash")
     if (
         (workspace / ".TreeWork" / "branches" / "gamma").exists()
-        or (workspace / ".TreeWork" / "design" / "gamma.md").exists()
+        or (workspace / ".TreeWork" / "branches" / "gamma" / "spec.md").exists()
     ):
         fail("pre-marker Apply crash left new branch or custom Spec documents")
     assert_no_pending_transaction(workspace)
@@ -1405,7 +1584,7 @@ tree:
         "branches/gamma/findings.md",
         "branches/gamma/verification.md",
         "branches/alpha/spec.md",
-        "design/gamma.md",
+        "branches/gamma/spec.md",
         "events.jsonl",
         "state/branches.json",
         "state/graph.json",
@@ -1422,7 +1601,7 @@ tree:
         fail("durable-intent crash did not exactly roll back before marker publication")
     if (
         (workspace / ".TreeWork" / "branches" / "gamma").exists()
-        or (workspace / ".TreeWork" / "design" / "gamma.md").exists()
+        or (workspace / ".TreeWork" / "branches" / "gamma" / "spec.md").exists()
     ):
         fail("durable-intent rollback left new branch or custom Spec documents")
     assert_no_pending_transaction(workspace)
@@ -1450,7 +1629,7 @@ tree:
     ):
         fail("startup recovery did not finish a complete marker commit forward")
     assert_typed_event(event_records(workspace)[-1], "tree.applied")
-    assert_branch_documents(workspace, "gamma", "design/gamma.md")
+    assert_branch_documents(workspace, "gamma", "branches/gamma/spec.md")
     assert_no_pending_transaction(workspace)
 
 
@@ -1531,27 +1710,38 @@ tree:
   purpose: Exercise isolated workers.
   spec: spec.md
   children:
-    - id: worker-a
-      title: Worker A
-      purpose: Independent worker branch A.
-    - id: worker-b
-      title: Worker B
-      purpose: Independent worker branch B.
-    - id: cleanup-remove
-      title: Cleanup Remove
-      purpose: Verify recoverable worktree removal.
-    - id: cleanup-keep
-      title: Cleanup Keep
-      purpose: Verify recoverable binding removal.
-    - id: cleanup-warning-remove
-      title: Cleanup Warning Remove
-      purpose: Verify committed removal warnings.
-    - id: cleanup-warning-keep
-      title: Cleanup Warning Keep
-      purpose: Verify committed binding warnings.
-    - id: cleanup-guard
-      title: Cleanup Guard
-      purpose: Verify untrusted workspace paths are never removed.
+    - id: reorg
+      title: Reorganization Target
+      purpose: Receive the live workers subtree during Apply.
+    - id: workers
+      title: Workers
+      purpose: Group isolated worker branches.
+      children:
+        - id: worker-a
+          title: Worker A
+          purpose: Independent worker branch A.
+        - id: worker-b
+          title: Worker B
+          purpose: Independent worker branch B.
+    - id: cleanup
+      title: Cleanup
+      purpose: Group completion cleanup fixtures.
+      children:
+        - id: cleanup-remove
+          title: Cleanup Remove
+          purpose: Verify recoverable worktree removal.
+        - id: cleanup-keep
+          title: Cleanup Keep
+          purpose: Verify recoverable binding removal.
+        - id: cleanup-warning-remove
+          title: Cleanup Warning Remove
+          purpose: Verify committed removal warnings.
+        - id: cleanup-warning-keep
+          title: Cleanup Warning Keep
+          purpose: Verify committed binding warnings.
+        - id: cleanup-guard
+          title: Cleanup Guard
+          purpose: Verify untrusted workspace paths are never removed.
 """,
     )
     run(workspace, build_dir, "tree", "apply")
@@ -1606,6 +1796,67 @@ tree:
     worker_b = Path(branch_state(workspace, "worker-b")["isolation"]["workspace_path"])
     if not worker_a.is_dir() or not worker_b.is_dir():
         fail("enter did not create independent managed worktrees")
+
+    worker_a_before = branch_artifact_dir(worker_a, "worker-a")
+    worker_b_before = branch_artifact_dir(worker_b, "worker-b")
+    (worker_a_before / "worker-evidence.txt").write_text("worker A\n", encoding="utf-8")
+    (worker_b_before / "worker-evidence.txt").write_text("worker B\n", encoding="utf-8")
+    run(workspace, build_dir, "tree", "update")
+    write_tree(
+        workspace,
+        """version: 1
+tree:
+  id: root
+  title: Worktree Test
+  purpose: Exercise isolated workers.
+  spec: spec.md
+  children:
+    - id: reorg
+      title: Reorganization Target
+      purpose: Receive the live workers subtree during Apply.
+      children:
+        - id: workers
+          title: Workers
+          purpose: Group isolated worker branches.
+          children:
+            - id: worker-a
+              title: Worker A
+              purpose: Independent worker branch A.
+            - id: worker-b
+              title: Worker B
+              purpose: Independent worker branch B.
+    - id: cleanup
+      title: Cleanup
+      purpose: Group completion cleanup fixtures.
+      children:
+        - id: cleanup-remove
+          title: Cleanup Remove
+          purpose: Verify recoverable worktree removal.
+        - id: cleanup-keep
+          title: Cleanup Keep
+          purpose: Verify recoverable binding removal.
+        - id: cleanup-warning-remove
+          title: Cleanup Warning Remove
+          purpose: Verify committed removal warnings.
+        - id: cleanup-warning-keep
+          title: Cleanup Warning Keep
+          purpose: Verify committed binding warnings.
+        - id: cleanup-guard
+          title: Cleanup Guard
+          purpose: Verify untrusted workspace paths are never removed.
+""",
+    )
+    run(workspace, build_dir, "tree", "apply")
+    worker_a_after = worker_a / ".TreeWork/branches/reorg/workers/worker-a"
+    worker_b_after = worker_b / ".TreeWork/branches/reorg/workers/worker-b"
+    if not worker_a_after.is_dir() or not worker_b_after.is_dir():
+        fail("Tree Apply did not publish moved branch documents to managed worktrees")
+    if worker_a_before.exists() or worker_b_before.exists():
+        fail("Tree Apply left stale branch documents in managed worktrees")
+    if (worker_a_after / "worker-evidence.txt").read_text(encoding="utf-8") != "worker A\n":
+        fail("Tree Apply lost worker A evidence while moving a live worktree")
+    if (worker_b_after / "worker-evidence.txt").read_text(encoding="utf-8") != "worker B\n":
+        fail("Tree Apply lost worker B evidence while moving a live worktree")
 
     env = os.environ.copy()
     env["TREEWORK_PLUGIN_ROOT"] = str(PLUGIN_ROOT)
@@ -1690,9 +1941,7 @@ tree:
     remove_worktree, remove_binding = prepare_completion_worktree(
         workspace, build_dir, "cleanup-remove"
     )
-    remove_progress = (
-        remove_worktree / ".TreeWork" / "branches" / "cleanup-remove" / "progress.md"
-    )
+    remove_progress = branch_artifact_dir(remove_worktree, "cleanup-remove") / "progress.md"
     before_remove_failure = (
         (workspace / ".TreeWork" / "state" / "project.json").read_bytes(),
         (workspace / ".TreeWork" / "state" / "branches.json").read_bytes(),
@@ -1734,9 +1983,7 @@ tree:
     keep_worktree, keep_binding = prepare_completion_worktree(
         workspace, build_dir, "cleanup-keep"
     )
-    keep_progress = (
-        keep_worktree / ".TreeWork" / "branches" / "cleanup-keep" / "progress.md"
-    )
+    keep_progress = branch_artifact_dir(keep_worktree, "cleanup-keep") / "progress.md"
     before_keep_failure = (
         (workspace / ".TreeWork" / "state" / "project.json").read_bytes(),
         (workspace / ".TreeWork" / "state" / "branches.json").read_bytes(),
@@ -1887,6 +2134,8 @@ def main() -> None:
         check_legacy_state_read(temp_root, build_dir)
         check_project_index_state_migration(temp_root, build_dir)
         check_tree_apply_validation(temp_root, build_dir)
+        check_hierarchical_artifact_relocation(temp_root, build_dir)
+        check_flat_artifact_layout_migration(temp_root, build_dir)
         check_publication_recovery(temp_root, build_dir)
         check_worktree_binding(temp_root, build_dir)
         print("ok: TreeWork current CLI regression")

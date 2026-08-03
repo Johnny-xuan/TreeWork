@@ -21,6 +21,12 @@ tree:
       purpose: Establish shared runtime and data contracts.
       spec: branches/foundation/spec.md
 
+      children:
+        - id: runtime
+          title: Runtime
+          purpose: Implement the shared execution core.
+          spec: branches/foundation/runtime/spec.md
+
     - id: project-map
       title: Project Map
       purpose: Make accepted project structure visible to the user.
@@ -36,8 +42,8 @@ hierarchy, and YAML order defines stable sibling order.
 
 - `version`: document schema version. Use `1`.
 - `tree`: the single root branch.
-- `id`: stable, unique, path-safe branch identity. Do not change an ID to rename
-  a branch.
+- `id`: stable, unique branch identity used by commands, dependencies, events,
+  Replay, and worktree bindings. Do not change an ID to rename a branch.
 - `title`: human-facing branch name.
 - `purpose`: one concise sentence explaining why the branch exists.
 - `spec`: optional path relative to `.TreeWork/` for the technical design owned
@@ -49,13 +55,39 @@ hierarchy, and YAML order defines stable sibling order.
 Use nesting for hierarchy and `depends_on` only for execution prerequisites.
 Do not add vague `related_to`, `affects`, `blocks`, or layout edges.
 
+## Canonical Artifact Paths
+
+Tree hierarchy also determines branch-document directories. Every non-root
+branch contributes one encoded directory segment beneath its parent:
+
+```text
+root / foundation / runtime
+  -> .TreeWork/branches/foundation/runtime/
+```
+
+Its `spec` value must name the canonical `spec.md` in that directory, relative
+to `.TreeWork/`. The other branch documents live beside it and are not listed
+in YAML. Root documents remain directly under `.TreeWork/`.
+
+The branch ID remains stable when a branch moves; the artifact path does not.
+Move the node and update its `spec` value in the same candidate. Apply derives
+and atomically relocates the branch and every descendant. Do not move managed
+branch directories by hand.
+
+IDs may contain the schema's supported punctuation, but each complete ID is one
+filesystem segment. Lowercase ASCII letters, digits, `-`, and `_` remain
+literal; other bytes are percent encoded. For example, branch ID `api/v2` under
+`platform` owns `branches/platform/api%2Fv2/spec.md`; the slash does not create
+another semantic level.
+
 ## Desired-State Editing
 
 Edit the complete desired tree rather than writing procedural operations:
 
 - add a nested node to create a branch;
 - move the same `id` to change its parent;
-- edit `title`, `purpose`, or `spec` to revise metadata;
+- edit `title` or `purpose` to revise metadata;
+- update `spec` when nesting changes so it remains the canonical derived path;
 - edit `depends_on` to revise prerequisites;
 - add children when a scope needs distinct owned work.
 

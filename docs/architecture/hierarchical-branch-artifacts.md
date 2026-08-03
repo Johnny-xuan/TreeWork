@@ -85,4 +85,3 @@ All consumers use the same resolver: scaffolding, lifecycle commands, Recall,
 completion validation, managed worktrees, Project Map narratives and watchers,
 MCP delegation, hooks, fixtures, and packaging tests. Production code must not
 construct `.TreeWork/branches/<branch-id>` directly.
-

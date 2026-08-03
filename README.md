@@ -268,9 +268,10 @@ make validate
 
 ## Status
 
-`v0.1.6` is the current version. Alignment, declarative Tree construction,
-protected branch traversal, Recall, Project Map, and Replay form a usable
-end-to-end loop. Project Map interaction design will continue to evolve.
+`v0.1.7` is the current version. Alignment, declarative Tree construction,
+hierarchy-aligned branch documents, protected branch traversal, Recall, Project
+Map, and Replay form a usable end-to-end loop. Project Map interaction design
+will continue to evolve.
 
 ## Privacy
 

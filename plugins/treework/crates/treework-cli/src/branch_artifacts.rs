@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 pub const LEGACY_FLAT_LAYOUT: u32 = 1;
 pub const HIERARCHICAL_LAYOUT: u32 = 2;
+const MAX_FILESYSTEM_SEGMENT_BYTES: usize = 255;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchArtifactNode {
@@ -142,7 +143,15 @@ fn hierarchical_relative_dir(
         if cursor == "root" {
             break;
         }
-        chain.push(encode_segment(cursor));
+        let segment = encode_segment(cursor);
+        if segment.len() > MAX_FILESYSTEM_SEGMENT_BYTES {
+            return Err(BranchArtifactError::new(format!(
+                "branch `{cursor}` encodes to a {}-byte filesystem segment; maximum is {} bytes",
+                segment.len(),
+                MAX_FILESYSTEM_SEGMENT_BYTES
+            )));
+        }
+        chain.push(segment);
         let parent = parents.get(cursor).ok_or_else(|| {
             BranchArtifactError::new(format!(
                 "branch `{cursor}` referenced while resolving `{id}` does not exist"
@@ -261,5 +270,16 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("duplicate branch id"));
+    }
+
+    #[test]
+    fn rejects_an_encoded_segment_over_the_portable_limit() {
+        let long_id = format!("a{}", ".".repeat(100));
+        let error = BranchArtifactLayout::build(
+            HIERARCHICAL_LAYOUT,
+            [node("root", ""), node(&long_id, "root")],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("filesystem segment"));
     }
 }

@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from _paths import PLUGIN_ROOT, REPOSITORY_ROOT
+from _paths import PLUGIN_ROOT, REPOSITORY_ROOT, branch_artifact_dir
 
 TW = PLUGIN_ROOT / "skills" / "treework" / "scripts" / "tw"
 BUNDLED_RUNTIME = (
@@ -72,7 +72,7 @@ def tree_source(*, include_late_branch: bool) -> str:
         - id: ui-late
           title: Late Topology Branch
           purpose: Prove topology invalidation and viewport anchoring.
-          spec: branches/ui-late/spec.md
+          spec: branches/ui-parent/ui-late/spec.md
 """ if include_late_branch else ""
     return f"""version: 1
 tree:
@@ -88,11 +88,11 @@ tree:
         - id: done-leaf
           title: Accepted Foundation
           purpose: Represent settled and verified work.
-          spec: branches/done-leaf/spec.md
+          spec: branches/foundation/done-leaf/spec.md
         - id: shared-base
           title: Shared Accepted Base
           purpose: Prove minimum-distance fan-in deduplication.
-          spec: branches/shared-base/spec.md
+          spec: branches/foundation/shared-base/spec.md
         - id: paused-leaf
           title: Parked Foundation
           purpose: Represent paused work using pattern and type.
@@ -107,7 +107,7 @@ tree:
         - id: ui-source
           title: Strata Map View
           purpose: Render the current depth-column manuscript view.
-          spec: branches/ui-source/spec.md
+          spec: branches/ui-parent/ui-source/spec.md
           depends_on:
             - done-leaf
           children:
@@ -130,7 +130,7 @@ tree:
         - id: dependency-focus
           title: Focused Causal Manuscript
           purpose: Explain direct and transitive prerequisites and dependents.
-          spec: branches/dependency-focus/spec.md
+          spec: branches/ui-parent/dependency-focus/spec.md
           depends_on:
             - done-leaf
             - ui-source
@@ -187,7 +187,7 @@ def complete_fixture_branch(
     branch_id: str,
 ) -> None:
     run_tw(workspace, build_dir, "enter", branch_id, "--no-isolate")
-    plan = workspace / ".TreeWork" / "branches" / branch_id / "task_plan.md"
+    plan = branch_artifact_dir(workspace, branch_id) / "task_plan.md"
     plan.write_text(
         plan.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
         encoding="utf-8",
@@ -852,10 +852,7 @@ async function launchBrowser() {
     const projectionBeforeNarrative = requests.filter((value) => value === '/api/project-map').length;
     const branchBeforeNarrative = requests.filter((value) => value.startsWith('/api/project-map/branch')).length;
     const progressPath = path.join(
-      process.env.TREEWORK_WORKSPACE,
-      '.TreeWork',
-      'branches',
-      'ui-source',
+      process.env.TREEWORK_UI_SOURCE_ARTIFACT_DIR,
       'progress.md'
     );
     const progress = fs.readFileSync(progressPath, 'utf8');
@@ -1956,6 +1953,9 @@ async function launchBrowser() {
             {
                 "TREEWORK_PROJECT_MAP_URL": url,
                 "TREEWORK_WORKSPACE": str(workspace),
+                "TREEWORK_UI_SOURCE_ARTIFACT_DIR": str(
+                    branch_artifact_dir(workspace, "ui-source")
+                ),
                 "TREEWORK_TW": str(TW),
                 "TREEWORK_UPDATED_TREE": str(updated_tree),
                 "TREEWORK_EVIDENCE_DIR": str(EVIDENCE_DIR),
