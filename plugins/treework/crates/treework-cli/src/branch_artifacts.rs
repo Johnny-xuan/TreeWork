@@ -13,7 +13,6 @@ pub struct BranchArtifactNode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchArtifactLayout {
-    version: u32,
     relative_dirs: BTreeMap<String, PathBuf>,
 }
 
@@ -81,14 +80,7 @@ impl BranchArtifactLayout {
             relative_dirs.insert(id, relative);
         }
 
-        Ok(Self {
-            version,
-            relative_dirs,
-        })
-    }
-
-    pub fn version(&self) -> u32 {
-        self.version
+        Ok(Self { relative_dirs })
     }
 
     pub fn relative_dir(&self, branch: &str) -> Result<&Path, BranchArtifactError> {

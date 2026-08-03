@@ -26,6 +26,10 @@ mod tree_document;
 mod tree_migration;
 mod tree_transaction;
 
+use branch_artifacts::{
+    encode_segment, BranchArtifactLayout, BranchArtifactNode, HIERARCHICAL_LAYOUT,
+    LEGACY_FLAT_LAYOUT,
+};
 use checkpoint::{write_checkpoint, TreeCheckpoint};
 use event::{
     AlignmentData, BranchCompletedData, BranchEnteredData, BranchStatusData, EventData,
@@ -37,7 +41,7 @@ use transaction::{recover_pending_transaction, PublicationTransaction, RecoveryO
 use tree_diff::{diff_tree, omitted_branch_ids};
 use tree_document::{
     accepted_nodes, parse_tree_document, serialize_tree_document, AcceptedTreeNode,
-    AcceptedTreeState, TreeDocument,
+    AcceptedTreeState, TreeDocument, TreeNode,
 };
 use tree_migration::{document_from_legacy, LegacyTreeNode};
 use tree_transaction::{TreeApplyJournal, TreeApplyPlan};
@@ -57,6 +61,8 @@ struct Project {
     stage: String,
     #[serde(default = "default_current_branch")]
     current_branch: String,
+    #[serde(default = "default_artifact_layout_version")]
+    artifact_layout_version: u32,
     #[serde(default)]
     last_event_seq: u64,
     #[serde(default)]
@@ -431,6 +437,24 @@ impl TwCommand {
                 }
         )
     }
+
+    fn mutates_project_state(&self) -> bool {
+        match self {
+            TwCommand::Init
+            | TwCommand::Check(_)
+            | TwCommand::Recall(_)
+            | TwCommand::Graph { .. }
+            | TwCommand::Version => false,
+            TwCommand::Enter(args) => !args.dry_run,
+            TwCommand::Sync
+            | TwCommand::Align { .. }
+            | TwCommand::Tree { .. }
+            | TwCommand::Pause(_)
+            | TwCommand::Abort(_)
+            | TwCommand::Verify(_)
+            | TwCommand::Complete(_) => true,
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -562,6 +586,9 @@ fn run() -> AppResult<()> {
     if needs_lock && existing_tw(&root).is_some() {
         recover_pending_transaction(&root)?;
         rollback_pending_tree_apply(&root)?;
+        if command.mutates_project_state() {
+            ensure_hierarchical_artifact_layout(&root)?;
+        }
     }
     match command {
         TwCommand::Init => {
@@ -611,6 +638,7 @@ fn cmd_init(root: &Path) -> AppResult<()> {
             schema_version: "0.1".to_string(),
             stage: "alignment".to_string(),
             current_branch: "root".to_string(),
+            artifact_layout_version: HIERARCHICAL_LAYOUT,
             last_event_seq: 1,
             tree_revision: 0,
             tree_editing: None,
@@ -939,6 +967,7 @@ fn ensure_tree_document_draft(root: &Path, project: &mut Project) -> AppResult<(
 fn migrate_legacy_tree_state(root: &Path, project: &mut Project) -> AppResult<()> {
     let branches = load_branches(root)?;
     let edges = load_edges(root)?;
+    let layout = artifact_layout(project, &branches)?;
     archive_legacy_tree_state(root)?;
     let unsupported_relations: Vec<&str> = edges
         .iter()
@@ -958,17 +987,17 @@ fn migrate_legacy_tree_state(root: &Path, project: &mut Project) -> AppResult<()
         .collect();
     let legacy_nodes: Vec<LegacyTreeNode> = branches
         .iter()
-        .map(|branch| {
+        .map(|branch| -> AppResult<LegacyTreeNode> {
             let default_spec = if branch.path == "root" {
                 tw_dir(root)
                     .join("spec.md")
                     .exists()
                     .then(|| "spec.md".to_string())
             } else {
-                let relative = format!("branches/{}/spec.md", branch.path);
+                let relative = canonical_spec_string(&layout, &branch.path)?;
                 tw_dir(root).join(&relative).exists().then_some(relative)
             };
-            LegacyTreeNode {
+            Ok(LegacyTreeNode {
                 id: branch.path.clone(),
                 parent: branch.parent.clone(),
                 title: if branch.title.trim().is_empty() {
@@ -990,9 +1019,9 @@ fn migrate_legacy_tree_state(root: &Path, project: &mut Project) -> AppResult<()
                     .get(branch.path.as_str())
                     .cloned()
                     .unwrap_or_default(),
-            }
+            })
         })
-        .collect();
+        .collect::<AppResult<Vec<_>>>()?;
     let document = document_from_legacy(&legacy_nodes).map_err(|errors| {
         AppError(format!(
             "cannot migrate the accepted legacy tree:\n{}",
@@ -1257,6 +1286,32 @@ fn build_declarative_tree_plan(root: &Path) -> AppResult<TreeApplyPlan> {
             }
         }
     }
+    if project.artifact_layout_version == HIERARCHICAL_LAYOUT {
+        match BranchArtifactLayout::build(
+            HIERARCHICAL_LAYOUT,
+            nodes.iter().map(|node| BranchArtifactNode {
+                id: node.id.clone(),
+                parent: node.parent.clone(),
+            }),
+        ) {
+            Ok(layout) => {
+                for node in &nodes {
+                    let Some(spec) = &node.spec else {
+                        continue;
+                    };
+                    match canonical_spec_string(&layout, &node.id) {
+                        Ok(canonical) if spec != &canonical => errors.push(format!(
+                            "branch `{}` Spec path must be canonical `{}` rather than `{}`",
+                            node.id, canonical, spec
+                        )),
+                        Ok(_) => {}
+                        Err(error) => errors.push(format!("branch `{}`: {}", node.id, error.0)),
+                    }
+                }
+            }
+            Err(error) => errors.push(format!("invalid candidate artifact layout: {error}")),
+        }
+    }
 
     let operations = diff_tree(accepted_before.as_ref(), &nodes);
     Ok(TreeApplyPlan {
@@ -1301,6 +1356,27 @@ fn apply_declarative_tree(root: &Path) -> AppResult<()> {
 
 fn apply_declarative_tree_inner(root: &Path, plan: TreeApplyPlan) -> AppResult<()> {
     let branches_dir = tw_dir(root).join("branches");
+    let prior_project = load_project(root)?;
+    let prior_branches = load_branches(root)?;
+    let old_layout = artifact_layout(&prior_project, &prior_branches)?;
+    let candidate_layout = BranchArtifactLayout::build(
+        prior_project.artifact_layout_version,
+        plan.nodes.iter().map(|node| BranchArtifactNode {
+            id: node.id.clone(),
+            parent: node.parent.clone(),
+        }),
+    )
+    .map_err(|error| AppError(format!("invalid candidate artifact layout: {error}")))?;
+    let affected_artifacts: HashSet<String> = prior_branches
+        .iter()
+        .filter(|branch| branch.path != "root")
+        .filter_map(|branch| {
+            let old = old_layout.relative_dir(&branch.path).ok()?;
+            let new = candidate_layout.relative_dir(&branch.path).ok()?;
+            (old != new).then(|| branch.path.clone())
+        })
+        .collect();
+    let managed_workspaces = managed_artifact_workspaces(root, &prior_branches);
     let mut tracked_paths = vec![
         tw_dir(root).join("state/project.json"),
         tw_dir(root).join("state/branches.json"),
@@ -1312,6 +1388,7 @@ fn apply_declarative_tree_inner(root: &Path, plan: TreeApplyPlan) -> AppResult<(
         tw_dir(root).join("progress.md"),
         tree_document_path(root),
     ];
+    tracked_paths.extend(managed_workspaces.iter().map(|workspace| tw_dir(workspace)));
     for relative in plan.nodes.iter().filter_map(|node| node.spec.as_deref()) {
         let path = tw_dir(root).join(relative);
         if !path.starts_with(&branches_dir) {
@@ -1335,6 +1412,27 @@ fn apply_declarative_tree_inner(root: &Path, plan: TreeApplyPlan) -> AppResult<(
         let mut project = load_project(root)?;
         let previous_branches = load_branches(root)?;
         let previous_edges = load_edges(root)?;
+        if !affected_artifacts.is_empty() {
+            relocate_artifact_tree(
+                root,
+                &old_layout,
+                &candidate_layout,
+                Some(&affected_artifacts),
+                &[],
+            )?;
+            for workspace in &managed_workspaces {
+                if tw_dir(workspace).exists() {
+                    relocate_artifact_tree(
+                        workspace,
+                        &old_layout,
+                        &candidate_layout,
+                        Some(&affected_artifacts),
+                        &[],
+                    )?;
+                }
+            }
+            inject_transaction_failure("tree-apply-after-artifact-relocation", &[])?;
+        }
         let mut branches = Vec::with_capacity(plan.nodes.len());
         let timestamp = now();
 
@@ -1351,13 +1449,19 @@ fn apply_declarative_tree_inner(root: &Path, plan: TreeApplyPlan) -> AppResult<(
                 branch.purpose = node.purpose.clone();
                 branch.last_sync = timestamp.clone();
                 if node.id != "root" {
-                    create_branch_docs(root, &node.id, &node.parent)?;
+                    create_branch_docs(root, &candidate_layout, &node.id, &node.parent)?;
                     if old_parent != node.parent {
-                        rewrite_branch_doc_headers(root, &node.id, &node.parent)?;
+                        rewrite_branch_doc_headers(
+                            root,
+                            &candidate_layout,
+                            &node.id,
+                            &node.parent,
+                        )?;
                     }
                     if title_changed {
                         sync_branch_plan_to_task_plan(
                             root,
+                            &candidate_layout,
                             &branch,
                             BranchPlanChanges {
                                 title: title_changed,
@@ -1386,8 +1490,13 @@ fn apply_declarative_tree_inner(root: &Path, plan: TreeApplyPlan) -> AppResult<(
                 last_sync: timestamp.clone(),
             };
             if node.id != "root" {
-                create_branch_docs(root, &branch.path, &branch.parent)?;
-                sync_branch_plan_to_task_plan(root, &branch, BranchPlanChanges::all())?;
+                create_branch_docs(root, &candidate_layout, &branch.path, &branch.parent)?;
+                sync_branch_plan_to_task_plan(
+                    root,
+                    &candidate_layout,
+                    &branch,
+                    BranchPlanChanges::all(),
+                )?;
             }
             ensure_spec_document(root, node)?;
             branches.push(branch);
@@ -1750,7 +1859,7 @@ fn cmd_enter(root: &Path, args: &EnterArgs) -> AppResult<()> {
         tw_dir(root).join("state/branches.json"),
         tw_dir(root).join("events.jsonl"),
         tw_dir(root).join("progress.md"),
-        branch_dir(root, branch_path).join("progress.md"),
+        branch_dir(root, branch_path)?.join("progress.md"),
     ];
     let mut transaction = PublicationTransaction::begin(root, "branch.enter", &paths, false)?;
     let mut candidate = before_branch.clone();
@@ -2124,12 +2233,16 @@ fn cleanup_created_enter_isolation(
     Ok(())
 }
 
-fn branch_publication_paths(root: &Path, branch: &str, verification: bool) -> Vec<PathBuf> {
-    let active_docs = docs_dir_for_branch(root, branch);
+fn branch_publication_paths(
+    root: &Path,
+    branch: &str,
+    verification: bool,
+) -> AppResult<Vec<PathBuf>> {
+    let active_docs = docs_dir_for_branch(root, branch)?;
     let control_docs = if branch == "root" {
         tw_dir(root)
     } else {
-        branch_dir(root, branch)
+        branch_dir(root, branch)?
     };
     let mut paths = vec![
         tw_dir(root).join("state/project.json"),
@@ -2143,7 +2256,7 @@ fn branch_publication_paths(root: &Path, branch: &str, verification: bool) -> Ve
         paths.push(active_docs.join("verification.md"));
         paths.push(control_docs.join("verification.md"));
     }
-    paths
+    Ok(paths)
 }
 
 fn cmd_pause(root: &Path, args: &PauseArgs) -> AppResult<()> {
@@ -2167,7 +2280,7 @@ fn cmd_pause(root: &Path, args: &PauseArgs) -> AppResult<()> {
         println!("Branch `{}` is already paused.", current_branch);
         return Ok(());
     }
-    let paths = branch_publication_paths(root, &current_branch, false);
+    let paths = branch_publication_paths(root, &current_branch, false)?;
     let transaction = PublicationTransaction::begin(root, "branch.pause", &paths, false)?;
     let timestamp = now();
     let branch = &mut branches[branch_index];
@@ -2230,7 +2343,7 @@ fn cmd_abort(root: &Path, args: &AbortArgs) -> AppResult<()> {
         println!("Branch `{}` is already aborted.", current_branch);
         return Ok(());
     }
-    let paths = branch_publication_paths(root, &current_branch, false);
+    let paths = branch_publication_paths(root, &current_branch, false)?;
     let transaction = PublicationTransaction::begin(root, "branch.abort", &paths, false)?;
     let timestamp = now();
     let branch = &mut branches[branch_index];
@@ -2284,14 +2397,14 @@ fn cmd_verify(root: &Path, args: &VerifyArgs) -> AppResult<()> {
         .position(|branch| branch.path == target)
         .ok_or_else(|| AppError(format!("missing branch `{}`", target)))?;
     let before = branches[branch_index].clone();
-    let verification_path = docs_dir_for_branch(root, &target).join("verification.md");
+    let verification_path = docs_dir_for_branch(root, &target)?.join("verification.md");
     if before.verification_status == status
         && verification_evidence_matches(&verification_path, &args.command, &args.result, &args.gap)
     {
         println!("Verification for `{}` is unchanged: {}.", target, status);
         return Ok(());
     }
-    let paths = branch_publication_paths(root, &target, true);
+    let paths = branch_publication_paths(root, &target, true)?;
     let transaction = PublicationTransaction::begin(root, "verification.record", &paths, false)?;
     let timestamp = now();
     let branch = &mut branches[branch_index];
@@ -2367,7 +2480,7 @@ fn cmd_complete(root: &Path, args: &CompleteArgs) -> AppResult<()> {
     let cleanup =
         prepare_completion_cleanup(root, &mut branches[branch_index], args.keep_worktree)?;
     let publish_control_docs = cleanup.plan.is_some();
-    let paths = branch_publication_paths(root, &target, false);
+    let paths = branch_publication_paths(root, &target, false)?;
     let transaction = PublicationTransaction::begin(root, "branch.complete", &paths, false)?;
     let timestamp = now();
     let branch = &mut branches[branch_index];
@@ -2690,8 +2803,13 @@ fn load_template(name: &str) -> AppResult<String> {
     Ok(content.to_string())
 }
 
-fn create_branch_docs(root: &Path, path: &str, parent: &str) -> AppResult<()> {
-    let dir = branch_dir(root, path);
+fn create_branch_docs(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    path: &str,
+    parent: &str,
+) -> AppResult<()> {
+    let dir = branch_dir_from_layout(root, layout, path)?;
     fs::create_dir_all(&dir)?;
     let replacements = |template: &str| {
         template
@@ -2719,10 +2837,11 @@ fn create_branch_docs(root: &Path, path: &str, parent: &str) -> AppResult<()> {
 
 fn sync_branch_plan_to_task_plan(
     root: &Path,
+    layout: &BranchArtifactLayout,
     branch: &Branch,
     changes: BranchPlanChanges,
 ) -> AppResult<()> {
-    let path = branch_dir(root, &branch.path).join("task_plan.md");
+    let path = branch_dir_from_layout(root, layout, &branch.path)?.join("task_plan.md");
     if !path.exists() {
         return Ok(());
     }
@@ -2806,7 +2925,7 @@ fn write_branch_verification_at(
         branch, command, result, gap, recorded_at
     );
     write_atomic(
-        &docs_dir_for_branch(root, branch).join("verification.md"),
+        &docs_dir_for_branch(root, branch)?.join("verification.md"),
         &content,
     )
 }
@@ -2843,9 +2962,15 @@ fn sync_all_from_state_with_control_branch(
     control_branch: Option<&str>,
 ) -> AppResult<()> {
     sync_root_progress(root, project, branches)?;
+    let layout = artifact_layout(project, branches)?;
     for branch in branches {
         if branch.path != "root" {
-            sync_branch_progress(root, branch, control_branch == Some(branch.path.as_str()))?;
+            sync_branch_progress(
+                root,
+                &layout,
+                branch,
+                control_branch == Some(branch.path.as_str()),
+            )?;
         }
     }
     Ok(())
@@ -2888,12 +3013,18 @@ fn remove_managed_block(content: &str, key: &str) -> String {
     next
 }
 
-fn sync_branch_progress(root: &Path, branch: &Branch, force_control: bool) -> AppResult<()> {
-    let active_branch = invocation().branch.clone();
-    let dir = if !force_control && active_branch.as_deref() == Some(branch.path.as_str()) {
-        docs_dir_for_branch(root, &branch.path)
+fn sync_branch_progress(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &Branch,
+    force_control: bool,
+) -> AppResult<()> {
+    let use_active_workspace =
+        !force_control && invocation().branch.as_deref() == Some(branch.path.as_str());
+    let dir = if use_active_workspace {
+        docs_dir_for_branch(root, &branch.path)?
     } else {
-        branch_dir(root, &branch.path)
+        branch_dir_from_layout(root, layout, &branch.path)?
     };
     let path = dir.join("progress.md");
     let mut content = read_to_string(&path)
@@ -3580,7 +3711,7 @@ fn validate_completion(root: &Path, branch_path: &str) -> AppResult<Vec<String>>
     if branch.status == "aborted" {
         findings.push(format!("branch is aborted: {}", branch.status_reason));
     }
-    let task_plan = read_to_string(&docs_dir_for_branch(root, branch_path).join("task_plan.md"))
+    let task_plan = read_to_string(&docs_dir_for_branch(root, branch_path)?.join("task_plan.md"))
         .unwrap_or_default();
     if !acceptance_complete(&task_plan) {
         findings.push("acceptance checklist is missing or incomplete".to_string());
@@ -4023,7 +4154,25 @@ pub(crate) fn validate_transaction_external_path(
         ))
     })?;
     let workspace = validate_managed_worktree(control_root, &binding.branch, workspace_path)?;
-    let branch_docs = tw_dir(&workspace).join("branches").join(&binding.branch);
+    let workspace_treework = tw_dir(&workspace);
+    let branches_root = workspace_treework.join("branches");
+    if path == workspace_treework || path == branches_root {
+        let parent = path.parent().ok_or_else(|| {
+            AppError(format!(
+                "external transaction path `{}` has no TreeWork parent",
+                path.display()
+            ))
+        })?;
+        if canonical_existing(parent, "external TreeWork directory")? != parent {
+            return Err(AppError(format!(
+                "external transaction path `{}` crosses a symlinked directory",
+                path.display()
+            )));
+        }
+        return Ok(());
+    }
+    let layout = accepted_artifact_layout(control_root)?;
+    let branch_docs = branch_dir_from_layout(&workspace, &layout, &binding.branch)?;
     let allowed = [
         branch_docs.join("progress.md"),
         branch_docs.join("verification.md"),
@@ -4311,7 +4460,7 @@ fn build_branch_recall(
         .collect();
     related_edges.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let docs = read_branch_docs(root, branch_path);
+    let docs = read_branch_docs(root, branch_path)?;
     let verification = branch_verification_summary(&branch, &docs);
     let (allowed_actions, blocked_actions) =
         branch_action_eligibility(root, project, &branch, &docs);
@@ -4682,15 +4831,15 @@ fn extract_coverage_gap(markdown: &str) -> String {
     String::new()
 }
 
-fn read_branch_docs(root: &Path, branch_path: &str) -> BranchDocs {
-    let dir = read_docs_dir_for_branch(root, branch_path);
-    BranchDocs {
+fn read_branch_docs(root: &Path, branch_path: &str) -> AppResult<BranchDocs> {
+    let dir = read_docs_dir_for_branch(root, branch_path)?;
+    Ok(BranchDocs {
         spec: read_to_string(&dir.join("spec.md")).unwrap_or_default(),
         task_plan: read_to_string(&dir.join("task_plan.md")).unwrap_or_default(),
         progress: read_to_string(&dir.join("progress.md")).unwrap_or_default(),
         findings: read_to_string(&dir.join("findings.md")).unwrap_or_default(),
         verification: read_to_string(&dir.join("verification.md")).unwrap_or_default(),
-    }
+    })
 }
 
 fn push_doc_section(content: &mut String, title: &str, body: &str) {
@@ -4728,41 +4877,44 @@ fn branch_slug(branch: &str) -> String {
     }
 }
 
-fn docs_dir_for_branch(root: &Path, branch: &str) -> PathBuf {
+fn docs_dir_for_branch(root: &Path, branch: &str) -> AppResult<PathBuf> {
+    let layout = accepted_artifact_layout(root)?;
     if branch == "root" {
-        return tw_dir(root);
+        return Ok(tw_dir(root));
     }
     if let Some(bound_branch) = &invocation().branch {
         if bound_branch == branch {
-            let candidate = tw_dir(&invocation().workspace_root)
-                .join("branches")
-                .join(branch);
+            let candidate = branch_dir_from_layout(&invocation().workspace_root, &layout, branch)?;
             if candidate.exists() {
-                return candidate;
+                return Ok(candidate);
             }
         }
     }
-    branch_dir(root, branch)
+    branch_dir_from_layout(root, &layout, branch)
 }
 
-fn read_docs_dir_for_branch(root: &Path, branch: &str) -> PathBuf {
-    let local = docs_dir_for_branch(root, branch);
-    if local != branch_dir(root, branch) {
-        return local;
+fn read_docs_dir_for_branch(root: &Path, branch: &str) -> AppResult<PathBuf> {
+    let layout = accepted_artifact_layout(root)?;
+    let local = docs_dir_for_branch(root, branch)?;
+    let control = branch_dir_from_layout(root, &layout, branch)?;
+    if local != control {
+        return Ok(local);
     }
     if let Ok(branches) = load_branches(root) {
         if let Some(item) = branches.iter().find(|item| item.path == branch) {
             if !item.isolation.workspace_path.trim().is_empty() {
-                let candidate = tw_dir(Path::new(&item.isolation.workspace_path))
-                    .join("branches")
-                    .join(branch);
+                let candidate = branch_dir_from_layout(
+                    Path::new(&item.isolation.workspace_path),
+                    &layout,
+                    branch,
+                )?;
                 if candidate.exists() {
-                    return candidate;
+                    return Ok(candidate);
                 }
             }
         }
     }
-    branch_dir(root, branch)
+    Ok(control)
 }
 
 fn replace_block(content: &str, key: &str, new_block: &str) -> String {
@@ -4821,8 +4973,13 @@ fn repair_parent_edges(edges: &mut Vec<Edge>, branches: &[Branch]) {
     edges.retain(|edge| edge.kind != "parent_of" || used_parent_edges.contains(&edge.id));
 }
 
-fn rewrite_branch_doc_headers(root: &Path, branch_path: &str, parent: &str) -> AppResult<()> {
-    let dir = branch_dir(root, branch_path);
+fn rewrite_branch_doc_headers(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    branch_path: &str,
+    parent: &str,
+) -> AppResult<()> {
+    let dir = branch_dir_from_layout(root, layout, branch_path)?;
     rewrite_doc_fields(
         &dir.join("task_plan.md"),
         &[("Branch", branch_path), ("Parent", parent)],
@@ -4875,8 +5032,402 @@ fn tw_dir(root: &Path) -> PathBuf {
     root.join(TW_DIR)
 }
 
-fn branch_dir(root: &Path, branch: &str) -> PathBuf {
-    tw_dir(root).join("branches").join(branch)
+fn artifact_layout(project: &Project, branches: &[Branch]) -> AppResult<BranchArtifactLayout> {
+    BranchArtifactLayout::build(
+        project.artifact_layout_version,
+        branches.iter().map(|branch| BranchArtifactNode {
+            id: branch.path.clone(),
+            parent: branch.parent.clone(),
+        }),
+    )
+    .map_err(|error| AppError(format!("invalid branch artifact layout: {error}")))
+}
+
+fn accepted_artifact_layout(root: &Path) -> AppResult<BranchArtifactLayout> {
+    let project = load_project(root)?;
+    let branches = load_branches(root)?;
+    artifact_layout(&project, &branches)
+}
+
+fn ensure_hierarchical_artifact_layout(root: &Path) -> AppResult<()> {
+    let project = load_project(root)?;
+    match project.artifact_layout_version {
+        HIERARCHICAL_LAYOUT => Ok(()),
+        LEGACY_FLAT_LAYOUT => migrate_hierarchical_artifact_layout(root, project),
+        version => Err(AppError(format!(
+            "unsupported branch artifact layout version {version}"
+        ))),
+    }
+}
+
+fn migrate_hierarchical_artifact_layout(root: &Path, mut project: Project) -> AppResult<()> {
+    if project.tree_editing.is_some() {
+        return Err(AppError(
+            "cannot migrate the legacy flat branch layout while a Tree Editing Session is open; finish that session with TreeWork 0.1.6 or restore the accepted Tree before upgrading"
+                .to_string(),
+        ));
+    }
+
+    let branches = load_branches(root)?;
+    let old_layout = artifact_layout(&project, &branches)?;
+    let new_layout = BranchArtifactLayout::build(
+        HIERARCHICAL_LAYOUT,
+        branches.iter().map(|branch| BranchArtifactNode {
+            id: branch.path.clone(),
+            parent: branch.parent.clone(),
+        }),
+    )
+    .map_err(|error| {
+        AppError(format!(
+            "cannot build hierarchical artifact layout: {error}"
+        ))
+    })?;
+
+    let mut document = if tree_document_path(root).exists() {
+        let source = read_to_string(&tree_document_path(root))?;
+        Some(parse_tree_document(&source).map_err(|errors| {
+            AppError(format!(
+                "cannot migrate branch artifacts because `.TreeWork/tree.yaml` is invalid:\n{}",
+                errors
+                    .iter()
+                    .map(|error| format!("- {}", error.render(".TreeWork/tree.yaml")))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))
+        })?)
+    } else {
+        None
+    };
+
+    let managed_workspaces = managed_artifact_workspaces(root, &branches);
+    let tracked: Vec<PathBuf> = managed_workspaces
+        .iter()
+        .map(|workspace| tw_dir(workspace))
+        .collect();
+    let transaction =
+        PublicationTransaction::begin(root, "artifact-layout.migrate", &tracked, false)?;
+    let result = (|| {
+        let spec_nodes = document.as_ref().map(accepted_nodes).unwrap_or_default();
+        relocate_artifact_tree(root, &old_layout, &new_layout, None, &spec_nodes)?;
+        for workspace in &managed_workspaces {
+            if tw_dir(workspace).exists() {
+                relocate_artifact_tree(workspace, &old_layout, &new_layout, None, &spec_nodes)?;
+            }
+        }
+        inject_transaction_failure("artifact-migration-after-relocation", &[])?;
+
+        if let Some(document) = &mut document {
+            rewrite_tree_document_spec_paths(document, &new_layout)?;
+            let source = serialize_tree_document(document).map_err(|error| {
+                AppError(format!("cannot serialize migrated Tree document: {error}"))
+            })?;
+            let source_hash = stable_hash_str(&source);
+            write_atomic(&tree_document_path(root), &source)?;
+            if accepted_tree_path(root).exists() {
+                let mut accepted = load_accepted_tree(root)?;
+                rewrite_accepted_spec_paths(&mut accepted, &new_layout)?;
+                accepted.source_hash = source_hash.clone();
+                accepted.state_hash = accepted_tree_state_hash(&accepted)?;
+                write_json_pretty(&accepted_tree_path(root), &accepted)?;
+                project.tree_hash = source_hash;
+            }
+        }
+
+        project.artifact_layout_version = HIERARCHICAL_LAYOUT;
+        for branch in branches.iter().filter(|branch| branch.path != "root") {
+            create_branch_docs(root, &new_layout, &branch.path, &branch.parent)?;
+        }
+        if let Some(document) = &document {
+            for node in accepted_nodes(document) {
+                ensure_spec_document(root, &node)?;
+            }
+        }
+        sync_root_progress(root, &project, &branches)?;
+        for branch in branches.iter().filter(|branch| branch.path != "root") {
+            sync_branch_progress(root, &new_layout, branch, true)?;
+        }
+        inject_transaction_failure("artifact-migration-after-state", &[])?;
+
+        let mut transaction = transaction;
+        transaction.prepare_intent(&project, None)?;
+        transaction.sync_before_marker()?;
+        inject_transaction_failure("artifact-migration-after-durable-intent", &[])?;
+        save_project(root, &project)?;
+        transaction.sync_marker()?;
+        inject_transaction_failure("artifact-migration-after-project-marker", &[])?;
+        transaction.finish()
+    })();
+    settle_transaction_result(root, result)?;
+    println!("Migrated branch documents to hierarchical artifact layout version 2.");
+    Ok(())
+}
+
+fn managed_artifact_workspaces(root: &Path, branches: &[Branch]) -> Vec<PathBuf> {
+    let mut workspaces = HashSet::new();
+    for branch in branches {
+        let isolation = &branch.isolation;
+        if isolation.mode != "git-worktree"
+            || !isolation.managed_by_treework
+            || isolation.workspace_path.trim().is_empty()
+        {
+            continue;
+        }
+        let workspace = Path::new(&isolation.workspace_path);
+        if let Ok(validated) = validate_managed_worktree(root, &branch.path, workspace) {
+            if validated != root {
+                workspaces.insert(validated);
+            }
+        }
+    }
+    let mut workspaces: Vec<PathBuf> = workspaces.into_iter().collect();
+    workspaces.sort();
+    workspaces
+}
+
+#[derive(Clone, Debug)]
+struct StagedArtifactBranch {
+    id: String,
+    old_path: PathBuf,
+    staged_path: PathBuf,
+    new_path: PathBuf,
+}
+
+fn relocate_artifact_tree(
+    workspace_root: &Path,
+    old_layout: &BranchArtifactLayout,
+    new_layout: &BranchArtifactLayout,
+    selected: Option<&HashSet<String>>,
+    spec_nodes: &[AcceptedTreeNode],
+) -> AppResult<()> {
+    let treework = tw_dir(workspace_root);
+    let branches_root = treework.join("branches");
+    let staging = treework.join("state/.branch-artifact-staging");
+    if staging.exists() {
+        return Err(AppError(format!(
+            "artifact migration staging path already exists: {}",
+            staging.display()
+        )));
+    }
+    fs::create_dir_all(&staging)?;
+
+    let mut branches: Vec<StagedArtifactBranch> = old_layout
+        .branches()
+        .filter(|(id, _)| *id != "root" && selected.is_none_or(|selected| selected.contains(*id)))
+        .map(|(id, old_relative)| {
+            let new_relative = new_layout.relative_dir(id).map_err(|error| {
+                AppError(format!("cannot resolve destination for `{id}`: {error}"))
+            })?;
+            Ok(StagedArtifactBranch {
+                id: id.to_string(),
+                old_path: treework.join(old_relative),
+                staged_path: staging.join(encode_segment(id)),
+                new_path: treework.join(new_relative),
+            })
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    branches.sort_by(|left, right| {
+        path_depth(&right.old_path)
+            .cmp(&path_depth(&left.old_path))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    for branch in &branches {
+        let metadata = match fs::symlink_metadata(&branch.old_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(AppError(format!(
+                "branch artifact source must be a real directory: {}",
+                branch.old_path.display()
+            )));
+        }
+        reject_symlinks_recursively(&branch.old_path)?;
+        fs::rename(&branch.old_path, &branch.staged_path)?;
+        remove_empty_parents(branch.old_path.parent(), &branches_root)?;
+    }
+
+    for node in spec_nodes.iter().filter(|node| {
+        node.spec.is_some()
+            && (node.id == "root" || selected.is_none_or(|selected| selected.contains(&node.id)))
+    }) {
+        let source = treework.join(node.spec.as_deref().unwrap_or_default());
+        let source = remap_staged_path(&source, &branches);
+        if !source.exists() {
+            continue;
+        }
+        let destination = if node.id == "root" {
+            treework.join("spec.md")
+        } else {
+            let branch = branches
+                .iter()
+                .find(|branch| branch.id == node.id)
+                .ok_or_else(|| AppError(format!("missing staged branch `{}`", node.id)))?;
+            if !branch.staged_path.exists() {
+                fs::create_dir_all(&branch.staged_path)?;
+            }
+            branch.staged_path.join("spec.md")
+        };
+        move_file_without_overwrite(&source, &destination)?;
+    }
+
+    branches.sort_by(|left, right| {
+        path_depth(&left.new_path)
+            .cmp(&path_depth(&right.new_path))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    for branch in &branches {
+        if !branch.staged_path.exists() {
+            continue;
+        }
+        if branch.new_path.exists() {
+            if !branch.new_path.is_dir() || fs::read_dir(&branch.new_path)?.next().is_some() {
+                return Err(AppError(format!(
+                    "artifact destination is not empty: {}",
+                    branch.new_path.display()
+                )));
+            }
+            fs::remove_dir(&branch.new_path)?;
+        }
+        if let Some(parent) = branch.new_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(&branch.staged_path, &branch.new_path)?;
+    }
+    if staging.exists() {
+        fs::remove_dir_all(&staging)?;
+    }
+    remove_empty_parents(staging.parent(), &treework)?;
+    Ok(())
+}
+
+fn remap_staged_path(path: &Path, branches: &[StagedArtifactBranch]) -> PathBuf {
+    branches
+        .iter()
+        .filter_map(|branch| {
+            path.strip_prefix(&branch.old_path).ok().map(|relative| {
+                (
+                    path_depth(&branch.old_path),
+                    branch.staged_path.join(relative),
+                )
+            })
+        })
+        .max_by_key(|(depth, _)| *depth)
+        .map(|(_, staged)| staged)
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+fn move_file_without_overwrite(source: &Path, destination: &Path) -> AppResult<()> {
+    if source == destination {
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(AppError(format!(
+            "Spec source must be a regular file: {}",
+            source.display()
+        )));
+    }
+    if destination.exists() {
+        let destination_metadata = fs::symlink_metadata(destination)?;
+        if destination_metadata.file_type().is_symlink() || !destination_metadata.is_file() {
+            return Err(AppError(format!(
+                "Spec destination is not a regular file: {}",
+                destination.display()
+            )));
+        }
+        if fs::read(source)? != fs::read(destination)? {
+            return Err(AppError(format!(
+                "Spec destination contains different content: {}",
+                destination.display()
+            )));
+        }
+        fs::remove_file(source)?;
+        return Ok(());
+    }
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(source, destination)?;
+    Ok(())
+}
+
+fn reject_symlinks_recursively(path: &Path) -> AppResult<()> {
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let metadata = fs::symlink_metadata(entry.path())?;
+        if metadata.file_type().is_symlink() {
+            return Err(AppError(format!(
+                "branch artifact migration refuses symlink {}",
+                entry.path().display()
+            )));
+        }
+        if metadata.is_dir() {
+            reject_symlinks_recursively(&entry.path())?;
+        } else if !metadata.is_file() {
+            return Err(AppError(format!(
+                "branch artifact migration refuses non-regular path {}",
+                entry.path().display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn path_depth(path: &Path) -> usize {
+    path.components().count()
+}
+
+fn rewrite_tree_document_spec_paths(
+    document: &mut TreeDocument,
+    layout: &BranchArtifactLayout,
+) -> AppResult<()> {
+    fn rewrite(node: &mut TreeNode, layout: &BranchArtifactLayout) -> AppResult<()> {
+        if node.spec.is_some() {
+            node.spec = Some(canonical_spec_string(layout, &node.id)?);
+        }
+        for child in &mut node.children {
+            rewrite(child, layout)?;
+        }
+        Ok(())
+    }
+    rewrite(&mut document.tree, layout)
+}
+
+fn rewrite_accepted_spec_paths(
+    accepted: &mut AcceptedTreeState,
+    layout: &BranchArtifactLayout,
+) -> AppResult<()> {
+    for node in &mut accepted.nodes {
+        if node.spec.is_some() {
+            node.spec = Some(canonical_spec_string(layout, &node.id)?);
+        }
+    }
+    Ok(())
+}
+
+fn canonical_spec_string(layout: &BranchArtifactLayout, branch: &str) -> AppResult<String> {
+    layout
+        .canonical_spec_path(branch)
+        .map_err(|error| AppError(error.to_string()))?
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| AppError(format!("canonical Spec path for `{branch}` is not UTF-8")))
+}
+
+fn branch_dir_from_layout(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &str,
+) -> AppResult<PathBuf> {
+    layout
+        .artifact_dir(&tw_dir(root), branch)
+        .map_err(|error| AppError(error.to_string()))
+}
+
+fn branch_dir(root: &Path, branch: &str) -> AppResult<PathBuf> {
+    branch_dir_from_layout(root, &accepted_artifact_layout(root)?, branch)
 }
 
 fn lock_dir(root: &Path) -> PathBuf {
@@ -5050,6 +5601,10 @@ fn default_binding_version() -> u32 {
     1
 }
 
+fn default_artifact_layout_version() -> u32 {
+    LEGACY_FLAT_LAYOUT
+}
+
 fn default_schema_version() -> String {
     "0.1".to_string()
 }
@@ -5182,5 +5737,165 @@ mod project_map_output_tests {
             "keep"
         );
         assert_eq!(accepted_snapshot(&fixture.root), accepted_before);
+    }
+}
+
+#[cfg(test)]
+mod hierarchical_artifact_integration_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn branch(id: &str, parent: &str, timestamp: &str) -> Branch {
+        Branch {
+            path: id.to_string(),
+            parent: parent.to_string(),
+            title: branch_title_from_id(id),
+            purpose: format!("Own {id} work."),
+            scope: BranchScope::default(),
+            intake_rationale: "test fixture".to_string(),
+            status: if id == "root" {
+                "in_progress".to_string()
+            } else {
+                "pending".to_string()
+            },
+            verification_status: "unverified".to_string(),
+            sync_status: "clean".to_string(),
+            isolation: BranchIsolation::default(),
+            status_reason: String::new(),
+            last_sync: timestamp.to_string(),
+        }
+    }
+
+    #[test]
+    fn migrates_flat_documents_and_custom_spec_without_changing_semantic_state() {
+        let temp = TempDir::new().expect("temp project");
+        let root = temp.path();
+        scaffold_treework(root).expect("scaffold");
+        let timestamp = "unix:10";
+        let branches = vec![
+            branch("root", "", timestamp),
+            branch("platform", "root", timestamp),
+            branch("api/v2", "platform", timestamp),
+        ];
+        let legacy_layout = BranchArtifactLayout::build(
+            LEGACY_FLAT_LAYOUT,
+            branches.iter().map(|branch| BranchArtifactNode {
+                id: branch.path.clone(),
+                parent: branch.parent.clone(),
+            }),
+        )
+        .expect("legacy layout");
+        for item in branches.iter().filter(|branch| branch.path != "root") {
+            create_branch_docs(root, &legacy_layout, &item.path, &item.parent)
+                .expect("legacy docs");
+        }
+        fs::write(
+            branch_dir_from_layout(root, &legacy_layout, "platform")
+                .expect("platform dir")
+                .join("spec.md"),
+            "# Platform Spec\n",
+        )
+        .expect("platform spec");
+        fs::write(
+            branch_dir_from_layout(root, &legacy_layout, "api/v2")
+                .expect("api dir")
+                .join("evidence.txt"),
+            "preserve evidence\n",
+        )
+        .expect("evidence");
+        fs::create_dir_all(tw_dir(root).join("custom")).expect("custom dir");
+        fs::write(
+            tw_dir(root).join("custom/api-design.md"),
+            "# API Design\n\nKeep this content.\n",
+        )
+        .expect("custom spec");
+
+        let tree = TreeDocument {
+            version: 1,
+            tree: TreeNode {
+                id: "root".to_string(),
+                title: "Root".to_string(),
+                purpose: "Coordinate the test project.".to_string(),
+                spec: Some("spec.md".to_string()),
+                depends_on: Vec::new(),
+                children: vec![TreeNode {
+                    id: "platform".to_string(),
+                    title: "Platform".to_string(),
+                    purpose: "Own platform work.".to_string(),
+                    spec: Some("branches/platform/spec.md".to_string()),
+                    depends_on: Vec::new(),
+                    children: vec![TreeNode {
+                        id: "api/v2".to_string(),
+                        title: "API V2".to_string(),
+                        purpose: "Own API work.".to_string(),
+                        spec: Some("custom/api-design.md".to_string()),
+                        depends_on: Vec::new(),
+                        children: Vec::new(),
+                    }],
+                }],
+            },
+        };
+        let source = serialize_tree_document(&tree).expect("tree source");
+        let source_hash = stable_hash_str(&source);
+        write_atomic(&tree_document_path(root), &source).expect("tree document");
+        let accepted =
+            accepted_tree_from_document(&tree, 3, &source_hash, timestamp).expect("accepted tree");
+        write_json_pretty(&accepted_tree_path(root), &accepted).expect("accepted tree state");
+        let project = Project {
+            schema_version: "0.1".to_string(),
+            stage: "work_tree".to_string(),
+            current_branch: "platform".to_string(),
+            artifact_layout_version: LEGACY_FLAT_LAYOUT,
+            last_event_seq: 0,
+            tree_revision: 3,
+            tree_editing: None,
+            tree_hash: source_hash,
+            last_sync: timestamp.to_string(),
+        };
+        save_project(root, &project).expect("project");
+        save_branches(root, &branches).expect("branches");
+        save_edges(root, &[]).expect("edges");
+
+        migrate_hierarchical_artifact_layout(root, project).expect("migration");
+
+        let migrated_project = load_project(root).expect("migrated project");
+        assert_eq!(
+            migrated_project.artifact_layout_version,
+            HIERARCHICAL_LAYOUT
+        );
+        assert_eq!(migrated_project.last_event_seq, 0);
+        assert_eq!(migrated_project.tree_revision, 3);
+        assert_eq!(migrated_project.current_branch, "platform");
+        let layout = artifact_layout(&migrated_project, &branches).expect("new layout");
+        let api_dir = branch_dir_from_layout(root, &layout, "api/v2").expect("new api dir");
+        assert_eq!(
+            api_dir
+                .strip_prefix(tw_dir(root))
+                .expect("relative api dir"),
+            Path::new("branches/platform/api%2Fv2")
+        );
+        assert_eq!(
+            fs::read_to_string(api_dir.join("spec.md")).expect("migrated spec"),
+            "# API Design\n\nKeep this content.\n"
+        );
+        assert_eq!(
+            fs::read_to_string(api_dir.join("evidence.txt")).expect("migrated evidence"),
+            "preserve evidence\n"
+        );
+        assert!(!tw_dir(root).join("custom/api-design.md").exists());
+        assert!(!tw_dir(root).join("branches/api/v2").exists());
+
+        let migrated_tree = parse_tree_document(
+            &fs::read_to_string(tree_document_path(root)).expect("migrated tree source"),
+        )
+        .expect("valid migrated tree");
+        let api = accepted_nodes(&migrated_tree)
+            .into_iter()
+            .find(|node| node.id == "api/v2")
+            .expect("api node");
+        assert_eq!(
+            api.spec.as_deref(),
+            Some("branches/platform/api%2Fv2/spec.md")
+        );
     }
 }

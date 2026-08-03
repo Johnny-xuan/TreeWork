@@ -10,6 +10,8 @@ use std::sync::{Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::branch_artifacts::{BranchArtifactLayout, BranchArtifactNode, LEGACY_FLAT_LAYOUT};
+
 const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_DOCUMENT_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_EVENT_TAIL_BYTES: u64 = 1024 * 1024;
@@ -213,11 +215,17 @@ struct StrictProject {
     schema_version: String,
     stage: String,
     current_branch: String,
+    #[serde(default = "default_artifact_layout_version")]
+    artifact_layout_version: u32,
     last_event_seq: u64,
     tree_revision: u64,
     tree_editing: Option<StrictTreeEditing>,
     tree_hash: String,
     last_sync: String,
+}
+
+fn default_artifact_layout_version() -> u32 {
+    LEGACY_FLAT_LAYOUT
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -1324,6 +1332,14 @@ fn read_narratives(
     project: &StrictProject,
     branches: &[StrictBranch],
 ) -> ReadResult<NarrativeSet> {
+    let layout = BranchArtifactLayout::build(
+        project.artifact_layout_version,
+        branches.iter().map(|branch| BranchArtifactNode {
+            id: branch.path.clone(),
+            parent: branch.parent.clone(),
+        }),
+    )
+    .map_err(|error| ReadModelError(format!("invalid branch artifact layout: {error}")))?;
     let mut ordered: Vec<&StrictBranch> = branches.iter().collect();
     if project.tree_revision == 0 {
         ordered.retain(|branch| branch.path == "root");
@@ -1334,7 +1350,7 @@ fn read_narratives(
     let mut managed_watch_roots = BTreeSet::new();
 
     for branch in ordered {
-        let source = document_source(root, treework, branch);
+        let source = document_source(root, treework, &layout, branch)?;
         if source.managed {
             managed_watch_roots.insert(source.base.clone());
         }
@@ -1369,25 +1385,33 @@ struct DocumentSource {
     managed: bool,
 }
 
-fn document_source(root: &Path, treework: &Path, branch: &StrictBranch) -> DocumentSource {
+fn document_source(
+    root: &Path,
+    treework: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &StrictBranch,
+) -> ReadResult<DocumentSource> {
     if branch.path != "root" {
-        if let Some(source) = validated_managed_document_source(root, branch) {
-            return source;
+        if let Some(source) = validated_managed_document_source(root, layout, branch) {
+            return Ok(source);
         }
     }
-    let relative_dir = if branch.path == "root" {
-        PathBuf::new()
-    } else {
-        PathBuf::from("branches").join(&branch.path)
-    };
-    DocumentSource {
+    let relative_dir = layout
+        .relative_dir(&branch.path)
+        .map_err(|error| ReadModelError(error.to_string()))?
+        .to_path_buf();
+    Ok(DocumentSource {
         base: treework.to_path_buf(),
         relative_dir,
         managed: false,
-    }
+    })
 }
 
-fn validated_managed_document_source(root: &Path, branch: &StrictBranch) -> Option<DocumentSource> {
+fn validated_managed_document_source(
+    root: &Path,
+    layout: &BranchArtifactLayout,
+    branch: &StrictBranch,
+) -> Option<DocumentSource> {
     let isolation = branch.isolation.as_ref()?;
     if isolation.mode != "git-worktree"
         || !isolation.managed_by_treework
@@ -1420,7 +1444,7 @@ fn validated_managed_document_source(root: &Path, branch: &StrictBranch) -> Opti
     let treework = fs::canonicalize(workspace.join(".TreeWork")).ok()?;
     Some(DocumentSource {
         base: treework,
-        relative_dir: PathBuf::from("branches").join(&branch.path),
+        relative_dir: layout.relative_dir(&branch.path).ok()?.to_path_buf(),
         managed: true,
     })
 }

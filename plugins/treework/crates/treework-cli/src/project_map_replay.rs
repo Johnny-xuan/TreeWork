@@ -1410,6 +1410,7 @@ mod tests {
             schema_version: "0.1".to_string(),
             stage: stage.to_string(),
             current_branch: current_branch.to_string(),
+            artifact_layout_version: crate::branch_artifacts::HIERARCHICAL_LAYOUT,
             last_event_seq,
             tree_revision,
             tree_editing: None,
