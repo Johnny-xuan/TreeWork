@@ -3,7 +3,7 @@
 TreeWork accepts focused fixes and improvements that strengthen the shared
 project-state protocol without adding project-specific policy to the core.
 
-TreeWork currently ships and is release-tested as a Codex plugin. Contributions
+TreeWork currently ships and is release-tested for Codex and Pi. Contributions
 for other coding-agent hosts are welcome when they preserve the same document,
 transaction, lifecycle, and verification semantics through a focused adapter.
 
@@ -11,8 +11,9 @@ transaction, lifecycle, and verification semantics through a focused adapter.
 
 - Project Map interaction design, navigation, accessibility, responsive
   behavior, and large-Tree performance.
-- Host adapters for Claude Code, Cursor, Gemini CLI, OpenCode, and other coding
-  agents, with installation documentation and host-specific tests.
+- Improvements to the Pi adapter and focused host adapters for Claude Code,
+  Cursor, Gemini CLI, OpenCode, and other coding agents, with installation
+  documentation and host-specific tests.
 - Controlled evaluations of state recovery, agent handoffs, development drift,
   quality, and operational overhead.
 - Documentation, examples, translations, packaging, and platform support.

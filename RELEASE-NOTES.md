@@ -1,5 +1,22 @@
 # Release Notes
 
+## Unreleased - Pi Host Adapter
+
+- Adds a focused Pi package that directly reuses TreeWork's Skill, Rust runtime,
+  and read-only MCP server without introducing a second project-state model.
+- Keeps Pi's always-active Agent-tool surface to one deferred loader for Recall,
+  Check, and Project Map; explicit host commands own cwd-bound Enter and Return.
+- Ports machine-owned-state protection and the stop-check boundary to Pi
+  extension lifecycle events.
+- Makes `/treework-enter` wait for Pi to become idle, prepares the conversation
+  fork before the state transition, and recovers cancelled switches by pausing
+  the branch and removing the unused fork.
+- Forks the current Pi conversation into managed branch worktrees and back to
+  the control workspace so cwd-bound tools and project context reload without
+  losing history.
+- Adds guardrail, MCP, package-load, and real offline Pi RPC round-trip tests,
+  plus reversible installation and rollback documentation.
+
 ## v0.1.7 - Hierarchical Branch Artifacts
 
 - Projects branch documents onto the same parent-child hierarchy as the

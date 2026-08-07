@@ -91,11 +91,13 @@ layout. The Agent never operates Project Map refresh machinery.
 
 The first successful Apply also completes a user-facing handoff. When the Tree
 revision moves from 0 to 1, call `treework_project_map` with the absolute
-workspace path and open the returned localhost URL in the Codex in-app browser.
-Do not substitute the system browser, and do not stop after merely printing the
-URL when the in-app browser is available. Later Apply transactions do not open
-another tab; an open panel updates itself, and a closed panel is relaunched only
-on an explicit user request.
+workspace path and use the current host adapter's browser handoff. Codex opens
+the returned localhost URL in the Codex in-app browser; Pi returns the URL and
+opens the system browser only when explicitly requested. Do not silently
+substitute one host's browser surface for another, and do not stop after merely
+printing the URL when an in-app browser is available. Later Apply transactions
+do not open another tab; an open panel updates itself, and a closed panel is
+relaunched only on an explicit user request.
 
 ## Boundaries
 

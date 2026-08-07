@@ -1347,7 +1347,7 @@ fn apply_declarative_tree(root: &Path) -> AppResult<()> {
     );
     if first_tree {
         println!(
-            "First Tree accepted. Call `treework_project_map` for `{}` and open its localhost URL in the Codex in-app browser.",
+            "First Tree accepted. Call `treework_project_map` for `{}` and use the current host adapter's browser handoff (Codex uses the Codex in-app browser; Pi opens a system browser only when explicitly requested).",
             root.display()
         );
     }
