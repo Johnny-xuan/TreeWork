@@ -4,9 +4,9 @@ PLUGIN_CREATOR ?= $(HOME)/.codex/skills/.system/plugin-creator
 SKILL_CREATOR ?= $(HOME)/.codex/skills/.system/skill-creator
 ARTIFACTS ?= .artifacts
 
-.PHONY: test test-rust test-ui test-runtime validate build-ui package browser-test
+.PHONY: test test-rust test-ui test-runtime test-pi validate build-ui package browser-test
 
-test: test-rust test-ui test-runtime
+test: test-rust test-ui test-runtime test-pi
 
 test-rust:
 	cargo test --manifest-path $(CLI_MANIFEST)
@@ -23,12 +23,18 @@ test-runtime:
 	python3 scripts/test_check_activation.py
 	python3 scripts/test_macos_quarantine_bootstrap.py
 
+# Pi is optional for local contributors, but CI sets TREEWORK_REQUIRE_PI=1.
+test-pi:
+	python3 scripts/check_pi_adapter.py
+	python3 scripts/check_pi_workspace_switch.py
+
 build-ui:
 	cd project-map-ui && npm run build
 
 validate: build-ui
 	git diff --exit-code -- $(PLUGIN)/assets/graph-panel
 	python3 scripts/check_packaging.py
+	python3 scripts/check_pi_adapter.py
 	python3 $(PLUGIN_CREATOR)/scripts/validate_plugin.py $(PLUGIN)
 	python3 $(SKILL_CREATOR)/scripts/quick_validate.py \
 		$(PLUGIN)/skills/treework

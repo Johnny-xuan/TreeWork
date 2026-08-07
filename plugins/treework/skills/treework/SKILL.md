@@ -100,6 +100,12 @@ workspace path. A CLI process cannot change the parent Agent's cwd. After Enter,
 run every filesystem and terminal action for that branch from the printed
 workspace path; merely running Enter from the control workspace is not enough.
 
+With the Pi host adapter, ask the user to invoke `/treework-enter <branch>`
+instead of running `tw enter` in Bash. Session replacement is an explicit Pi
+host command, not an Agent tool call. The command waits for active tools,
+performs Enter, and moves the complete conversation into the worktree. Before a
+control-workspace transition, ask the user to invoke `/treework-return`.
+
 - **Pause:** park unfinished work after updating branch documents and committing
   what should be durable. The managed worktree and binding stay in place for
   later reuse.
