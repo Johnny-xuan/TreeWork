@@ -170,6 +170,16 @@ def check_pi_load(pi_bin: str | None) -> None:
     ok("Pi runtime loads adapter and shared TreeWork skill")
 
 
+def package_source_matches(source: object, agent_dir: Path) -> bool:
+    if not isinstance(source, str):
+        return False
+    target = REPOSITORY_ROOT.resolve()
+    return any(
+        (base / source).resolve() == target
+        for base in (agent_dir, REPOSITORY_ROOT, Path.cwd())
+    )
+
+
 def check_pi_package_install(pi_bin: str | None) -> None:
     if not pi_bin:
         return
@@ -193,11 +203,7 @@ def check_pi_package_install(pi_bin: str | None) -> None:
         settings_path = agent_dir / "settings.json"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         packages = settings.get("packages", [])
-        recorded = any(
-            isinstance(source, str)
-            and (REPOSITORY_ROOT / source).resolve() == REPOSITORY_ROOT.resolve()
-            for source in packages
-        )
+        recorded = any(package_source_matches(source, agent_dir) for source in packages)
         if not recorded:
             fail(f"Pi did not record the TreeWork package source: {packages}")
         commands = run_pi_rpc_load(pi_bin, [], env)
@@ -219,8 +225,7 @@ def check_pi_package_install(pi_bin: str | None) -> None:
             fail(f"Pi local package rollback failed:\n{remove.stdout}\n{remove.stderr}")
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         still_enabled = any(
-            isinstance(source, str)
-            and (REPOSITORY_ROOT / source).resolve() == REPOSITORY_ROOT.resolve()
+            package_source_matches(source, agent_dir)
             for source in settings.get("packages", [])
         )
         if still_enabled:
