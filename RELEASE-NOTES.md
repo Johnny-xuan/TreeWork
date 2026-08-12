@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-- Adds `treework-manual`, a standalone single-file Agent Skill that preserves
-  TreeWork's root-to-branch mental model and Markdown project state for writing,
-  research, notes, planning, and other non-coding work without the CLI or
-  Project Map.
+- Adds `treework-manual`, an independently installable single-file TreeWork
+  edition for writing, research, notes, planning, creative work, operations,
+  and other evolving projects. Agents maintain its Tree and project state
+  directly in Markdown.
 - Adds a focused Pi package that directly reuses TreeWork's Skill, Rust runtime,
   and read-only MCP server without introducing a second project-state model.
 - Keeps Pi's always-active Agent-tool surface to one deferred loader for Recall,

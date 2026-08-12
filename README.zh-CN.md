@@ -10,30 +10,35 @@
 
 # TreeWork
 
-TreeWork 是一套面向 Coding Agent 的**树引导开发系统**，同时提供 Codex 插件
-和聚焦的 Pi host adapter。它帮助 Agent 把复杂项目组织成一棵 branch 树，在
-编码前完成重要设计，并在长期开发中沿着树移动而不失去方向。
+TreeWork 是一种面向 Agent 的**树引导工作模型**。它把持续演化的工作外化成一棵
+持久的 Tree，让每条工作线归属一个 branch，并让 Agent 从根进入 branch、完成
+局部工作后返回根，而不是把不断到来的请求当成一条扁平队列。Plan、Progress 和
+Findings 让每个位置在中断、上下文重置或 Agent 交接后仍然可以恢复。
 
-代码检查能够看到已经实现了什么，检索型记忆能够找回历史片段，但两者都不能
-稳定回答项目已经接受了什么、工作进行到哪里，以及上一个 Agent 为什么停下。
-TreeWork 将已接受的项目结构、branch 状态、Spec、进度、结论和验证记录保存在
-模型上下文之外，让长期任务不必每次从头重建项目就能继续。
+本仓库提供两个可以独立安装的版本。它们共享从根到 branch 的工作心智模型，
+但各自拥有独立的状态模型和运行契约。
 
-## 选择合适的形态
+## TreeWork 版本
 
-- **完整 TreeWork** 是下文介绍的 Coding Agent 系统。它通过 Codex 插件或 Pi
+- **TreeWork for Coding Agents** 是带运行时的开发系统。它通过 Codex 插件或 Pi
   adapter 提供 Alignment、Spec、声明式 Tree transaction、隔离 Git worktree、
   completion 保护、Recall 和 Project Map。
 - **[TreeWork Manual](skills/treework-manual/SKILL.md)** 是一份独立、单文件的
-  Agent Skill，适用于写作、研究、笔记、规划、创作及其他长期任务。它保留原始
-  TreeWork 的工作心智模型和 Markdown 状态文档，不依赖 CLI、固定阶段、Git、
-  Hooks 或 Project Map。
+  Agent Skill，适用于写作、研究、笔记、规划、创作、运营及其他持续演化的工作。
+  Agent 直接在 Markdown 中维护 Tree 与项目状态。
 
-Coding 工作需要确定性状态与隔离时使用完整系统。一个有能力的 Agent 只需要知道
-自己在哪里、在一条 branch 内工作、留下可恢复现实并沿项目 Tree 移动时，使用
-Manual Skill。
+根据用户需要和实际工作选择版本，不要把其中一个视为另一个的 fallback。同一个
+项目不能在没有显式迁移的情况下混用两套状态模型。
 
-## 首次安装
+## 安装
+
+### TreeWork Manual
+
+将 [`skills/treework-manual`](skills/treework-manual) 作为普通 Agent Skill 安装
+或加载即可。该目录是独立完整的，只包含一份 `SKILL.md`，不会安装 Coding Agent
+运行时。
+
+### TreeWork for Coding Agents
 
 TreeWork 当前面向 macOS 和 Linux 上的 Codex 与 Pi。原生 Windows 支持尚未
 经过发布测试。
@@ -41,7 +46,7 @@ TreeWork 当前面向 macOS 和 Linux 上的 Codex 与 Pi。原生 Windows 支�
 运行依赖包括 Git、Bash、Python 3、Rust 和 Cargo。Project Map 前端已经打包；
 只有开发前端时才需要 Node.js。
 
-### Pi
+#### Pi
 
 直接从本仓库安装 Pi package：
 
@@ -56,7 +61,7 @@ pi install git:github.com/Johnny-xuan/TreeWork
 worktree。完整安装、使用、验证与回滚方式见
 [TreeWork for Pi](adapters/pi/README.md)。
 
-### Codex 引导安装
+#### Codex 引导安装
 
 把下面这段 prompt 直接交给一个能够使用终端的 Codex Agent：
 
@@ -90,7 +95,7 @@ TreeWork。
    后，再进行项目初始化。
 ```
 
-### Codex 手动安装
+#### Codex 手动安装
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -232,9 +237,8 @@ Pi package manifest 和聚焦的扩展位于 [`adapters/pi`](adapters/pi)，并�
 同一份 Skill、运行时和 MCP 服务。TreeWork 将项目状态保存在 `.TreeWork/` 下；
 两个 host adapter 都不会创建第二事实源。
 
-独立的 [`skills/treework-manual`](skills/treework-manual) 目录只包含 Manual
-Skill。兼容 Agent Skills 的 host 可以直接安装或加载这个目录，不需要 coding
-runtime。
+可独立安装的 [`skills/treework-manual`](skills/treework-manual) 版本只包含一份
+自包含的 Agent Skill。
 
 ## 仓库结构
 

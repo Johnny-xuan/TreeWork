@@ -10,36 +10,40 @@
 
 # TreeWork
 
-TreeWork is a **tree-guided development system for coding agents**. It ships as
-a Codex plugin and a focused Pi host adapter. TreeWork helps agents organize
-complex projects as branches, prepare the important design before coding, and
-move through long-running work without losing direction.
+TreeWork is a **tree-guided working model for Agents**. It externalizes evolving
+work as a persistent Tree, gives every line of effort a branch, and teaches an
+Agent to move from the root into one branch and back instead of chasing requests
+as a flat queue. Plans, progress, and findings keep each location recoverable
+across interruptions, context resets, and handoffs.
 
-Code inspection shows what exists and retrieval memory recalls fragments, but
-neither reliably tells an Agent what the project has accepted, where work
-stands, or why it stopped. TreeWork therefore keeps the accepted project
-structure, branch state, Specs, progress, findings, and verification outside
-the model context so work can resume without reconstructing the project from
-scratch.
+This repository provides two independently installable editions. They share the
+same root-to-branch mental model, but each defines its own state and operating
+contract.
 
-## Choose The Right Form
+## TreeWork Editions
 
-- **Full TreeWork** is the coding-agent system documented below. It adds
+- **TreeWork for Coding Agents** is a runtime-backed development system. It adds
   Alignment, Specs, declarative Tree transactions, isolated Git worktrees,
   protected completion, Recall, and Project Map through the Codex plugin or Pi
   adapter.
 - **[TreeWork Manual](skills/treework-manual/SKILL.md)** is a standalone,
   single-file Agent Skill for writing, research, notes, planning, creative work,
-  and other long-running tasks. It keeps the original TreeWork mental model and
-  Markdown state documents without requiring a CLI, fixed stages, Git, hooks,
-  or Project Map.
+  operations, and other evolving work. The Agent maintains the Tree and its
+  project state directly in Markdown.
 
-Use the full system when coding work needs deterministic state and isolation.
-Use the Manual Skill when a capable Agent only needs a durable way to locate
-itself, work inside one branch, checkpoint reality, and move through a project
-Tree.
+Choose an edition from the user's needs and the actual work rather than treating
+one as a fallback for the other. Do not combine both state models inside one
+project without an explicit migration.
 
-## First Install
+## Installation
+
+### TreeWork Manual
+
+Install or load [`skills/treework-manual`](skills/treework-manual) as a normal
+Agent Skill. The directory is self-contained and consists of one `SKILL.md`;
+it does not install the Coding Agent runtime.
+
+### TreeWork For Coding Agents
 
 TreeWork currently targets Codex and Pi on macOS and Linux. Native Windows
 support has not been release-tested.
@@ -47,7 +51,7 @@ support has not been release-tested.
 Runtime prerequisites: Git, Bash, Python 3, Rust, and Cargo. The Project Map
 frontend is bundled; Node.js is needed only for frontend development.
 
-### Pi
+#### Pi
 
 Install the focused Pi package directly from this repository:
 
@@ -63,7 +67,7 @@ and stop-check guardrails, and provides explicit `/treework-enter` and
 sessions. See [TreeWork for Pi](adapters/pi/README.md) for
 the complete install, use, verification, and rollback contract.
 
-### Codex guided install
+#### Codex guided install
 
 Give the following prompt to a Codex Agent with terminal access:
 
@@ -103,7 +107,7 @@ inside the current project until I explicitly approve it.
    new one. Leave project initialization to the new Codex task after I choose.
 ```
 
-### Codex manual install
+#### Codex manual install
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -256,9 +260,8 @@ The Pi package manifest and focused extension live under
 MCP server. TreeWork stores project state under `.TreeWork/`; neither host
 adapter creates a second source of truth.
 
-The standalone [`skills/treework-manual`](skills/treework-manual) directory
-contains only the Manual Skill. Agent Skills-compatible hosts can install or
-load that directory directly without the coding runtime.
+The independently installable [`skills/treework-manual`](skills/treework-manual)
+edition contains one self-contained Agent Skill.
 
 ## Repository Layout
 

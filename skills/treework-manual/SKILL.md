@@ -1,16 +1,21 @@
 ---
 name: treework-manual
-description: Use TreeWork Manual when long-running work has multiple related branches and an Agent needs to preserve where it is, what each branch owns, what is planned, what is actually true, and what has been learned across interruptions or handoffs using Markdown only. Trigger when requests jump between scopes, work must continue across sessions or Agents, plans and reality may drift, or the user asks for TreeWork without the full CLI/runtime system. Do not use for short single-scope tasks or projects already managed by the full TreeWork runtime.
+description: Use TreeWork Manual when the user asks to work with TreeWork, or when the Agent judges from the situation that organizing work as a persistent Markdown Tree would improve direction, continuity, recovery, or handoff. Adapt the Tree's depth and document detail to the user's needs and domain instead of applying a fixed task-size threshold. Suitable for writing, research, notes, planning, creative work, operations, and other evolving work; the Agent maintains its state directly in Markdown.
 ---
 
 # TreeWork Manual
 
-TreeWork Manual gives an Agent a sense of place in long-running work. Instead
-of treating every new request as the next item in a flat queue, first locate it
-in the project Tree. The root shows how the whole work is organized. Each
-branch is a local worksite with a clear responsibility. The Agent works inside
-one branch, leaves its reality recoverable, returns to the root, and then moves
-to the next branch.
+TreeWork gives an Agent a durable sense of place in ongoing work. It externalizes
+the work as a Tree: the root holds the whole project, each branch owns one
+coherent line of effort, and documents at the root and branches preserve intent,
+reality, and durable knowledge. Direction no longer depends on the current
+conversation remaining intact.
+
+The Agent's unit of movement is not the next message; it is the current branch.
+A new request is first located in the Tree. The Agent then works from the root
+into the branch that owns the work, leaves that branch recoverable, returns to
+the root, and chooses the next branch. Requests may arrive in any order, but the
+work still moves through the Tree.
 
 ```text
 Start at the root
@@ -27,14 +32,15 @@ The Tree provides direction; the documents provide continuity:
 PROJECT shows the global map.
 Plan points toward intended work.
 Progress records present reality.
-Findings preserve what the work has taught us.
+Findings preserve what the work has taught the Agent.
 ```
 
-This is a working mental model, not a fixed workflow. A branch is simply a
-coherent work scope, not necessarily a Git branch. The Tree may follow chapters,
-themes, research questions, note collections, deliverables, phases, modules,
-clients, or another structure that fits the actual work. It may begin shallow
-and grow as understanding improves.
+TreeWork is a working mental model rather than a prescribed sequence. A branch
+may be a chapter, theme, research question, note collection, deliverable, phase,
+module, client, or another coherent scope that fits the project. The Tree may
+begin shallow and grow as understanding improves. The Agent maintains this
+topology and its state directly in Markdown so that people and other Agents can
+inspect, correct, and continue the same work.
 
 ## Core Mental Model
 
@@ -182,10 +188,12 @@ outcome exists, not merely because the Agent touched it.
 
 1. Inspect the user's request, existing artifacts, and existing organization
    before creating TreeWork files.
-2. Create `.TreeWork/` only when the work is long-running, has multiple scopes,
-   is likely to be interrupted or handed off, or is already becoming hard to
-   hold in one context.
-3. Write root `PROJECT.md`, Plan, Progress, and Findings from what is currently
+2. Decide from the user's request and the actual situation whether an explicit
+   Tree will make the work easier to locate, continue, inspect, or hand off.
+   An explicit user request is sufficient; otherwise use judgment rather than a
+   fixed size, duration, or branch-count threshold.
+3. When TreeWork is appropriate, create `.TreeWork/` and write root `PROJECT.md`,
+   Plan, Progress, and Findings from what is currently
    known. Do not fabricate certainty to fill headings.
 4. Create only the first useful branches. It is valid to work at the root when
    the work has one coherent scope.
@@ -281,7 +289,6 @@ reality, durable knowledge, and next viable movement.
   information whose effect crosses branch boundaries.
 - Do not let document upkeep become the work. Keep every file concise enough to
   recover direction quickly.
-- If `.TreeWork/state/`, `.TreeWork/events.jsonl`, or `tree.yaml` indicates a
-  full runtime-managed TreeWork project, do not edit machine-owned state or mix
-  manual conventions into it. Use the full TreeWork workflow unless the user
-  explicitly requests a migration.
+- If another TreeWork edition already manages the project, do not silently mix
+  its state model with this one. Follow the user's explicit choice of edition,
+  or agree on a migration before changing the existing TreeWork state.
