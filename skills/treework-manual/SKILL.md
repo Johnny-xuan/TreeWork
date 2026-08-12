@@ -1,16 +1,16 @@
 ---
 name: treework-manual
-description: Use TreeWork Manual to keep long-running, multi-part work oriented through a Markdown project tree. Trigger for writing, research, note systems, planning, creative work, operations, or other evolving work where an Agent must preserve global direction, local progress, discoveries, and an exact restart point across interruptions or handoffs without relying on TreeWork CLI, Git worktrees, fixed development stages, or Project Map.
+description: Use TreeWork Manual when long-running work has multiple related branches and an Agent needs to preserve where it is, what each branch owns, what is planned, what is actually true, and what has been learned across interruptions or handoffs using Markdown only. Trigger when requests jump between scopes, work must continue across sessions or Agents, plans and reality may drift, or the user asks for TreeWork without the full CLI/runtime system. Do not use for short single-scope tasks or projects already managed by the full TreeWork runtime.
 ---
 
 # TreeWork Manual
 
-TreeWork Manual is a way of working, not a command system. Treat the work as a
-tree of owned scopes instead of a flat task list or a conversation the Agent is
-expected to remember. The root supplies the global map. Each branch owns one
-coherent line of work. Move through that tree deliberately so another Agent, or
-the same Agent after context loss, can recover the work from files rather than
-reconstructing it from fragments.
+TreeWork Manual gives an Agent a sense of place in long-running work. Instead
+of treating every new request as the next item in a flat queue, first locate it
+in the project Tree. The root shows how the whole work is organized. Each
+branch is a local worksite with a clear responsibility. The Agent works inside
+one branch, leaves its reality recoverable, returns to the root, and then moves
+to the next branch.
 
 ```text
 Start at the root
@@ -21,9 +21,20 @@ Start at the root
 -> choose the next branch
 ```
 
-A branch is a work scope, not necessarily a Git branch. Depending on the work,
-branches may be chapters, themes, research questions, note collections,
-deliverables, phases, modules, clients, or any other useful decomposition.
+The Tree provides direction; the documents provide continuity:
+
+```text
+PROJECT shows the global map.
+Plan points toward intended work.
+Progress records present reality.
+Findings preserve what the work has taught us.
+```
+
+This is a working mental model, not a fixed workflow. A branch is simply a
+coherent work scope, not necessarily a Git branch. The Tree may follow chapters,
+themes, research questions, note collections, deliverables, phases, modules,
+clients, or another structure that fits the actual work. It may begin shallow
+and grow as understanding improves.
 
 ## Core Mental Model
 
