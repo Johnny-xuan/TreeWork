@@ -21,6 +21,9 @@ adapter, and the shared source used to maintain both.
   documents.
 - `adapters/pi/` is the focused Pi host surface. Reuse the shared Skill, CLI,
   transactions, and MCP server; do not fork their state or semantics.
+- `skills/treework-manual/` is the standalone manual variant. Keep its working
+  contract in one `SKILL.md` and do not make it depend on the CLI, hooks,
+  schemas, Git worktrees, fixed coding stages, or Project Map.
 - Agent references explain how to use TreeWork. Do not put Rust modules, API
   internals, migration plans, or frontend architecture there.
 - `project-map-ui/` is source; `plugins/treework/assets/graph-panel/`

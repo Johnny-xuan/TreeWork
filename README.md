@@ -22,6 +22,23 @@ structure, branch state, Specs, progress, findings, and verification outside
 the model context so work can resume without reconstructing the project from
 scratch.
 
+## Choose The Right Form
+
+- **Full TreeWork** is the coding-agent system documented below. It adds
+  Alignment, Specs, declarative Tree transactions, isolated Git worktrees,
+  protected completion, Recall, and Project Map through the Codex plugin or Pi
+  adapter.
+- **[TreeWork Manual](skills/treework-manual/SKILL.md)** is a standalone,
+  single-file Agent Skill for writing, research, notes, planning, creative work,
+  and other long-running tasks. It keeps the original TreeWork mental model and
+  Markdown state documents without requiring a CLI, fixed stages, Git, hooks,
+  or Project Map.
+
+Use the full system when coding work needs deterministic state and isolation.
+Use the Manual Skill when a capable Agent only needs a durable way to locate
+itself, work inside one branch, checkpoint reality, and move through a project
+Tree.
+
 ## First Install
 
 TreeWork currently targets Codex and Pi on macOS and Linux. Native Windows
@@ -239,11 +256,16 @@ The Pi package manifest and focused extension live under
 MCP server. TreeWork stores project state under `.TreeWork/`; neither host
 adapter creates a second source of truth.
 
+The standalone [`skills/treework-manual`](skills/treework-manual) directory
+contains only the Manual Skill. Agent Skills-compatible hosts can install or
+load that directory directly without the coding runtime.
+
 ## Repository Layout
 
 ```text
 plugins/treework/              Installable Codex plugin and shared runtime
 adapters/pi/                  Focused Pi extension, tests, and host docs
+skills/treework-manual/       Standalone manual TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map source
 docs/product/                 Product behavior and UX contracts
 docs/architecture/            Runtime and transaction contracts

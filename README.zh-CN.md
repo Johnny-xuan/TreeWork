@@ -19,6 +19,20 @@ TreeWork 是一套面向 Coding Agent 的**树引导开发系统**，同时提�
 TreeWork 将已接受的项目结构、branch 状态、Spec、进度、结论和验证记录保存在
 模型上下文之外，让长期任务不必每次从头重建项目就能继续。
 
+## 选择合适的形态
+
+- **完整 TreeWork** 是下文介绍的 Coding Agent 系统。它通过 Codex 插件或 Pi
+  adapter 提供 Alignment、Spec、声明式 Tree transaction、隔离 Git worktree、
+  completion 保护、Recall 和 Project Map。
+- **[TreeWork Manual](skills/treework-manual/SKILL.md)** 是一份独立、单文件的
+  Agent Skill，适用于写作、研究、笔记、规划、创作及其他长期任务。它保留原始
+  TreeWork 的工作心智模型和 Markdown 状态文档，不依赖 CLI、固定阶段、Git、
+  Hooks 或 Project Map。
+
+Coding 工作需要确定性状态与隔离时使用完整系统。一个有能力的 Agent 只需要知道
+自己在哪里、在一条 branch 内工作、留下可恢复现实并沿项目 Tree 移动时，使用
+Manual Skill。
+
 ## 首次安装
 
 TreeWork 当前面向 macOS 和 Linux 上的 Codex 与 Pi。原生 Windows 支持尚未
@@ -218,11 +232,16 @@ Pi package manifest 和聚焦的扩展位于 [`adapters/pi`](adapters/pi)，并�
 同一份 Skill、运行时和 MCP 服务。TreeWork 将项目状态保存在 `.TreeWork/` 下；
 两个 host adapter 都不会创建第二事实源。
 
+独立的 [`skills/treework-manual`](skills/treework-manual) 目录只包含 Manual
+Skill。兼容 Agent Skills 的 host 可以直接安装或加载这个目录，不需要 coding
+runtime。
+
 ## 仓库结构
 
 ```text
 plugins/treework/              可安装的 Codex 插件及共享运行时
 adapters/pi/                  聚焦的 Pi 扩展、测试与 host 文档
+skills/treework-manual/       独立的手动 TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map 源码
 docs/product/                 产品行为和交互契约
 docs/architecture/            运行时和 transaction 契约
