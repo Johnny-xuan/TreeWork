@@ -58,7 +58,7 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-Create a GitHub release from the matching section of `RELEASE-NOTES.md`. Do not
-move an existing release tag. Do not publish from a dirty worktree or from
-uncommitted `dist/` contents. The tag workflow validates that `vX.Y.Z` matches
-the committed plugin version and uploads both edition ZIPs to the same release.
+The tag workflow validates that `vX.Y.Z` matches the committed plugin version,
+creates one GitHub Release, and uploads both edition ZIPs together. Do not move
+an existing release tag. Do not publish from a dirty worktree or from
+uncommitted `dist/` contents.
