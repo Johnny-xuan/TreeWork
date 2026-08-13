@@ -10,10 +10,9 @@
 
 # TreeWork
 
-TreeWork is a **tree-guided development system for coding agents**. It ships as
-a Codex plugin and a focused Pi host adapter. TreeWork helps agents organize
-complex projects as branches, prepare the important design before coding, and
-move through long-running work without losing direction.
+TreeWork is a **tree-guided development plugin for Codex**. It helps coding
+agents organize complex projects as branches, prepare the important design
+before coding, and move through long-running work without losing direction.
 
 Code inspection shows what exists and retrieval memory recalls fragments, but
 neither reliably tells an Agent what the project has accepted, where work
@@ -24,29 +23,11 @@ scratch.
 
 ## First Install
 
-TreeWork currently targets Codex and Pi on macOS and Linux. Native Windows
-support has not been release-tested.
+TreeWork currently targets Codex on macOS and Linux. Native Windows support has
+not been release-tested.
 
 Runtime prerequisites: Git, Bash, Python 3, Rust, and Cargo. The Project Map
 frontend is bundled; Node.js is needed only for frontend development.
-
-### Pi
-
-Install the focused Pi package directly from this repository:
-
-```bash
-pi install git:github.com/Johnny-xuan/TreeWork
-```
-
-Restart Pi, run `/treework-adapter` to verify the runtime, then invoke
-`/skill:treework` or ask Pi to use TreeWork. The adapter reuses the shipped
-Skill and MCP server, loads read-only tools on demand, ports TreeWork's mutation
-and stop-check guardrails, and provides explicit `/treework-enter` and
-`/treework-return` commands that fork the conversation across cwd-bound Pi
-sessions. See [TreeWork for Pi](adapters/pi/README.md) for
-the complete install, use, verification, and rollback contract.
-
-### Codex guided install
 
 Give the following prompt to a Codex Agent with terminal access:
 
@@ -86,7 +67,7 @@ inside the current project until I explicitly approve it.
    new one. Leave project initialization to the new Codex task after I choose.
 ```
 
-### Codex manual install
+### Manual Install
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -190,10 +171,8 @@ TreeWork includes a local, read-only Project Map:
 - **Dependency** shows prerequisites and downstream work for one branch.
 - **Replay** reconstructs accepted TreeWork transitions over time.
 
-After the first Tree is accepted, the Agent uses its host adapter's Project Map
-handoff. Codex opens the localhost URL in its in-app browser; Pi returns the URL
-and opens the system browser only on explicit request. The panel projects
-accepted state; it does not edit the project.
+After the first Tree is accepted, the Agent opens Project Map in the Codex
+in-app browser. The panel projects accepted state; it does not edit the project.
 
 ## Design Rationale
 
@@ -225,7 +204,7 @@ Read the formal model and evaluation design in the
 
 ## Package Contents
 
-The installable Codex plugin lives at
+The installable plugin lives at
 [`plugins/treework`](plugins/treework) and includes:
 
 - the staged project-state Skill and Agent-facing references;
@@ -234,16 +213,12 @@ The installable Codex plugin lives at
 - a local read-only MCP server for Recall and Project Map launch;
 - bundled Project Map assets.
 
-The Pi package manifest and focused extension live under
-[`adapters/pi`](adapters/pi) and directly reuse that same Skill, runtime, and
-MCP server. TreeWork stores project state under `.TreeWork/`; neither host
-adapter creates a second source of truth.
+TreeWork stores project state under `.TreeWork/`.
 
 ## Repository Layout
 
 ```text
-plugins/treework/              Installable Codex plugin and shared runtime
-adapters/pi/                  Focused Pi extension, tests, and host docs
+plugins/treework/              Installable Codex plugin
 project-map-ui/               React/D3/SVG Project Map source
 docs/product/                 Product behavior and UX contracts
 docs/architecture/            Runtime and transaction contracts
@@ -256,7 +231,7 @@ while using TreeWork. Maintainer implementation contracts stay under `docs/`.
 
 ## Community and Help Wanted
 
-TreeWork currently ships and is release-tested for Codex and Pi. Support for
+TreeWork currently ships and is release-tested as a Codex plugin. Support for
 Claude Code, Cursor, Gemini CLI, OpenCode, and other agent hosts is welcome
 through focused host adapters.
 
@@ -293,11 +268,10 @@ make validate
 
 ## Status
 
-`v0.1.7` is the current runtime version. Alignment, declarative Tree
-construction, hierarchy-aligned branch documents, protected branch traversal,
-Recall, Project Map, and Replay form a usable end-to-end loop. Codex and Pi host
-surfaces share those semantics. Project Map interaction design will continue to
-evolve.
+`v0.1.7` is the current version. Alignment, declarative Tree construction,
+hierarchy-aligned branch documents, protected branch traversal, Recall, Project
+Map, and Replay form a usable end-to-end loop. Project Map interaction design
+will continue to evolve.
 
 ## Privacy
 
