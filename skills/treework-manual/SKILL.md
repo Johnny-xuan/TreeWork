@@ -280,9 +280,6 @@ reality, durable knowledge, and next viable movement.
 
 ## Boundaries
 
-- Do not force software-development concepts such as Requirements or Specs onto
-  writing, notes, research, or creative work. Add domain documents only when
-  they genuinely help that branch.
 - Do not duplicate information across root and branch documents. Promote only
   information whose effect crosses branch boundaries.
 - Do not let document upkeep become the work. Keep every file concise enough to
