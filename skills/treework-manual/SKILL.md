@@ -1,6 +1,6 @@
 ---
 name: treework-manual
-description: Use TreeWork Manual when the user asks to work with TreeWork, or when the Agent judges from the situation that organizing work as a persistent Markdown Tree would improve direction, continuity, recovery, or handoff. Adapt the Tree's depth and document detail to the user's needs and domain instead of applying a fixed task-size threshold. Suitable for writing, research, notes, planning, creative work, operations, and other evolving work; the Agent maintains its state directly in Markdown.
+description: Use TreeWork Manual when the user asks for it, or when the Agent judges that organizing ongoing, multi-part work as a persistent Markdown Tree would improve direction, continuity, recovery, or handoff. Adapt the Tree's depth and document detail to the user's needs, domain, and situation rather than a fixed threshold.
 ---
 
 # TreeWork Manual
@@ -280,8 +280,6 @@ reality, durable knowledge, and next viable movement.
 
 ## Boundaries
 
-- Do not require CLI commands, hooks, Git branches, Git worktrees, transactions,
-  schemas, fixed stages, verification machinery, or a visual Project Map.
 - Do not force software-development concepts such as Requirements or Specs onto
   writing, notes, research, or creative work. Add domain documents only when
   they genuinely help that branch.
@@ -289,6 +287,8 @@ reality, durable knowledge, and next viable movement.
   information whose effect crosses branch boundaries.
 - Do not let document upkeep become the work. Keep every file concise enough to
   recover direction quickly.
-- If another TreeWork edition already manages the project, do not silently mix
-  its state model with this one. Follow the user's explicit choice of edition,
-  or agree on a migration before changing the existing TreeWork state.
+- Do not invent extra process, files, or bookkeeping merely to make the Tree
+  look complete. Add structure only when it improves orientation or recovery.
+- Treat an existing `.TreeWork/` as user data. If its structure differs from
+  the one described here, inspect and preserve it, then ask before adopting,
+  reorganizing, or replacing it.
