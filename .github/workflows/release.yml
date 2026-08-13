@@ -1,0 +1,31 @@
+name: Publish TreeWork Editions
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release assets from the tagged commit
+        run: python3 scripts/package_release_assets.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Publish both TreeWork editions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/releases/TreeWork-Coding-Agents-"${GITHUB_REF_NAME}".zip \
+            dist/releases/TreeWork-Manual-"${GITHUB_REF_NAME}".zip \
+            --title "TreeWork ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag

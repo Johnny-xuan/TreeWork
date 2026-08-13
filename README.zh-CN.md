@@ -20,8 +20,8 @@ Findings 让每个位置在中断、上下文重置或 Agent 交接后仍然可�
 
 ## TreeWork 版本
 
-- **TreeWork for Coding Agents** 是带运行时的开发系统。它通过 Codex 插件或 Pi
-  adapter 提供 Alignment、Spec、声明式 Tree transaction、隔离 Git worktree、
+- **TreeWork for Coding Agents** 是带运行时的开发系统。它通过 Codex 插件提供
+  Alignment、Spec、声明式 Tree transaction、隔离 Git worktree、
   completion 保护、Recall 和 Project Map。
 - **[TreeWork Manual](skills/treework-manual/SKILL.md)** 是一份独立、单文件的
   Agent Skill，适用于写作、研究、笔记、规划、创作、运营及其他持续演化的工作。
@@ -34,32 +34,21 @@ Findings 让每个位置在中断、上下文重置或 Agent 交接后仍然可�
 
 ### TreeWork Manual
 
-将 [`skills/treework-manual`](skills/treework-manual) 作为普通 Agent Skill 安装
-或加载即可。该目录是独立完整的，只包含一份 `SKILL.md`，不会安装 Coding Agent
-运行时。
+从对应的 [GitHub Release](https://github.com/Johnny-xuan/TreeWork/releases)
+下载 `TreeWork-Manual-vX.Y.Z.zip`，将其中的 `treework-manual/` 目录解压到 Agent
+host 的 Skills 目录。对于 Codex，安装到 `$CODEX_HOME/skills/`（通常为
+`~/.codex/skills/`），然后新建一个任务。这个包是独立完整的，只包含一份
+`SKILL.md`；ZIP 根目录同时包含 MIT License。
+
+同一份可独立安装的源码位于 [`skills/treework-manual`](skills/treework-manual)。
 
 ### TreeWork for Coding Agents
 
-TreeWork 当前面向 macOS 和 Linux 上的 Codex 与 Pi。原生 Windows 支持尚未
-经过发布测试。
+TreeWork for Coding Agents 当前面向 macOS 和 Linux 上的 Codex。原生 Windows
+支持尚未经过发布测试。
 
 运行依赖包括 Git、Bash、Python 3、Rust 和 Cargo。Project Map 前端已经打包；
 只有开发前端时才需要 Node.js。
-
-#### Pi
-
-直接从本仓库安装 Pi package：
-
-```bash
-pi install git:github.com/Johnny-xuan/TreeWork
-```
-
-重启 Pi，运行 `/treework-adapter` 验证运行时，然后执行 `/skill:treework` 或直接
-要求 Pi 使用 TreeWork。适配器直接复用仓库中的 Skill 和 MCP 服务，按需加载只读
-工具，移植 TreeWork 的写保护与 stop check，并通过显式的 `/treework-enter` 与
-`/treework-return` 命令 fork cwd 绑定的 Pi 会话，把完整对话移入或移出 branch
-worktree。完整安装、使用、验证与回滚方式见
-[TreeWork for Pi](adapters/pi/README.md)。
 
 #### Codex 引导安装
 
@@ -193,9 +182,8 @@ TreeWork 包含一个本地只读 Project Map：
 - **Dependency** 展示某个 branch 的前置依赖和下游工作；
 - **Replay** 按时间重建已接受的 TreeWork 状态转移。
 
-第一个 Tree 被接受后，Agent 使用当前 host adapter 提供的 Project Map 交接。
-Codex 会在内置浏览器中打开本地 URL；Pi 返回该 URL，只有在明确请求时才打开系统
-浏览器。面板只投影已接受状态，不直接编辑项目。
+第一个 Tree 被接受后，Agent 会在 Codex 内置浏览器中打开 Project Map。面板只
+投影已接受状态，不直接编辑项目。
 
 ## 设计理由
 
@@ -233,9 +221,7 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 - 用于 Recall 和启动 Project Map 的本地只读 MCP 服务；
 - 已打包的 Project Map 资源。
 
-Pi package manifest 和聚焦的扩展位于 [`adapters/pi`](adapters/pi)，并直接复用
-同一份 Skill、运行时和 MCP 服务。TreeWork 将项目状态保存在 `.TreeWork/` 下；
-两个 host adapter 都不会创建第二事实源。
+TreeWork for Coding Agents 将项目状态保存在 `.TreeWork/` 下。
 
 可独立安装的 [`skills/treework-manual`](skills/treework-manual) 版本只包含一份
 自包含的 Agent Skill。
@@ -243,8 +229,7 @@ Pi package manifest 和聚焦的扩展位于 [`adapters/pi`](adapters/pi)，并�
 ## 仓库结构
 
 ```text
-plugins/treework/              可安装的 Codex 插件及共享运行时
-adapters/pi/                  聚焦的 Pi 扩展、测试与 host 文档
+plugins/treework/              TreeWork for Coding Agents Codex 插件
 skills/treework-manual/       独立的手动 TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map 源码
 docs/product/                 产品行为和交互契约
@@ -258,8 +243,9 @@ paper/                        研究论文源码与图片
 
 ## 社区参与
 
-TreeWork 目前为 Codex 和 Pi 提供发布测试支持。欢迎贡献者通过聚焦的 host
-adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等 Agent host 增加支持。
+TreeWork for Coding Agents 目前以 Codex 作为发布测试目标。欢迎贡献者通过聚焦的
+host adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等 Agent host
+增加支持。支持独立 Agent Skills 的 host 可以直接加载 TreeWork Manual。
 
 当前特别需要贡献者参与的方向包括：
 
@@ -288,10 +274,10 @@ make validate
 
 ## 当前状态
 
-`v0.1.7` 是当前运行时版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
+`v0.1.7` 是当前 Coding Agents 版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
 branch 文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成
-可用的端到端闭环，Codex 与 Pi host surface 共享这些语义。Project Map 的交互
-设计仍会持续演化。
+可用的端到端闭环。TreeWork Manual 从同一仓库和 tag 独立发布。Project Map 的
+交互设计仍会持续演化。
 
 ## 隐私
 

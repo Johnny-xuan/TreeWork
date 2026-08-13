@@ -4,7 +4,6 @@
 
 1. Update the version in:
    - `plugins/treework/.codex-plugin/plugin.json`
-   - `package.json` (Pi package; validation requires the same version)
    - `plugins/treework/crates/treework-cli/Cargo.toml`
    - `plugins/treework/Cargo.lock`
    - `project-map-ui/package.json`
@@ -19,12 +18,19 @@
 Packaging reads tracked bytes from `HEAD`, not the mutable worktree:
 
 ```bash
-python3 scripts/package_plugin.py
-python3 scripts/check_package_commit_source.py
+make package
 ```
 
-The clean package appears at `dist/treework/`. It contains only the
-tracked installable plugin subtree.
+Packaging produces three local forms:
+
+- `dist/treework/` is the unpacked Coding Agents plugin candidate;
+- `dist/releases/TreeWork-Coding-Agents-vX.Y.Z.zip` is the independently
+  installable Coding Agents release asset;
+- `dist/releases/TreeWork-Manual-vX.Y.Z.zip` is the independently installable
+  single-file Manual release asset.
+
+Both ZIP assets come from the same committed `HEAD` and share the release tag,
+but users install them independently.
 
 ## Install the Candidate
 
@@ -42,15 +48,6 @@ version:
 python3 scripts/check_activation.py
 ```
 
-Install the repository as a local Pi package in an isolated or disposable Pi
-agent directory, verify `/treework-adapter`, then remove it again. The automated
-package-load and rollback check plus the real offline session round-trip are:
-
-```bash
-TREEWORK_REQUIRE_PI=1 python3 scripts/check_pi_adapter.py
-TREEWORK_REQUIRE_PI=1 python3 scripts/check_pi_workspace_switch.py
-```
-
 ## Publish
 
 After the installed candidate passes:
@@ -63,4 +60,5 @@ git push origin vX.Y.Z
 
 Create a GitHub release from the matching section of `RELEASE-NOTES.md`. Do not
 move an existing release tag. Do not publish from a dirty worktree or from
-uncommitted `dist/` contents.
+uncommitted `dist/` contents. The tag workflow validates that `vX.Y.Z` matches
+the committed plugin version and uploads both edition ZIPs to the same release.

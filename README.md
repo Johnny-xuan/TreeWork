@@ -24,8 +24,7 @@ contract.
 
 - **TreeWork for Coding Agents** is a runtime-backed development system. It adds
   Alignment, Specs, declarative Tree transactions, isolated Git worktrees,
-  protected completion, Recall, and Project Map through the Codex plugin or Pi
-  adapter.
+  protected completion, Recall, and Project Map through the Codex plugin.
 - **[TreeWork Manual](skills/treework-manual/SKILL.md)** is a standalone,
   single-file Agent Skill for writing, research, notes, planning, creative work,
   operations, and other evolving work. The Agent maintains the Tree and its
@@ -39,33 +38,23 @@ project without an explicit migration.
 
 ### TreeWork Manual
 
-Install or load [`skills/treework-manual`](skills/treework-manual) as a normal
-Agent Skill. The directory is self-contained and consists of one `SKILL.md`;
-it does not install the Coding Agent runtime.
+Download `TreeWork-Manual-vX.Y.Z.zip` from the matching
+[GitHub Release](https://github.com/Johnny-xuan/TreeWork/releases), then extract
+its `treework-manual/` directory into the Skills directory used by your Agent
+host. For Codex, install it under `$CODEX_HOME/skills/` (normally
+`~/.codex/skills/`) and start a new task. The package is self-contained and
+contains one `SKILL.md`; the ZIP root also carries the MIT license.
+
+The same independently installable source is available at
+[`skills/treework-manual`](skills/treework-manual).
 
 ### TreeWork For Coding Agents
 
-TreeWork currently targets Codex and Pi on macOS and Linux. Native Windows
-support has not been release-tested.
+TreeWork for Coding Agents currently targets Codex on macOS and Linux. Native
+Windows support has not been release-tested.
 
 Runtime prerequisites: Git, Bash, Python 3, Rust, and Cargo. The Project Map
 frontend is bundled; Node.js is needed only for frontend development.
-
-#### Pi
-
-Install the focused Pi package directly from this repository:
-
-```bash
-pi install git:github.com/Johnny-xuan/TreeWork
-```
-
-Restart Pi, run `/treework-adapter` to verify the runtime, then invoke
-`/skill:treework` or ask Pi to use TreeWork. The adapter reuses the shipped
-Skill and MCP server, loads read-only tools on demand, ports TreeWork's mutation
-and stop-check guardrails, and provides explicit `/treework-enter` and
-`/treework-return` commands that fork the conversation across cwd-bound Pi
-sessions. See [TreeWork for Pi](adapters/pi/README.md) for
-the complete install, use, verification, and rollback contract.
 
 #### Codex guided install
 
@@ -211,10 +200,8 @@ TreeWork includes a local, read-only Project Map:
 - **Dependency** shows prerequisites and downstream work for one branch.
 - **Replay** reconstructs accepted TreeWork transitions over time.
 
-After the first Tree is accepted, the Agent uses its host adapter's Project Map
-handoff. Codex opens the localhost URL in its in-app browser; Pi returns the URL
-and opens the system browser only on explicit request. The panel projects
-accepted state; it does not edit the project.
+After the first Tree is accepted, the Agent opens Project Map in the Codex
+in-app browser. The panel projects accepted state; it does not edit the project.
 
 ## Design Rationale
 
@@ -255,10 +242,7 @@ The installable Codex plugin lives at
 - a local read-only MCP server for Recall and Project Map launch;
 - bundled Project Map assets.
 
-The Pi package manifest and focused extension live under
-[`adapters/pi`](adapters/pi) and directly reuse that same Skill, runtime, and
-MCP server. TreeWork stores project state under `.TreeWork/`; neither host
-adapter creates a second source of truth.
+TreeWork for Coding Agents stores project state under `.TreeWork/`.
 
 The independently installable [`skills/treework-manual`](skills/treework-manual)
 edition contains one self-contained Agent Skill.
@@ -266,8 +250,7 @@ edition contains one self-contained Agent Skill.
 ## Repository Layout
 
 ```text
-plugins/treework/              Installable Codex plugin and shared runtime
-adapters/pi/                  Focused Pi extension, tests, and host docs
+plugins/treework/              TreeWork for Coding Agents Codex plugin
 skills/treework-manual/       Standalone manual TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map source
 docs/product/                 Product behavior and UX contracts
@@ -281,9 +264,10 @@ while using TreeWork. Maintainer implementation contracts stay under `docs/`.
 
 ## Community and Help Wanted
 
-TreeWork currently ships and is release-tested for Codex and Pi. Support for
-Claude Code, Cursor, Gemini CLI, OpenCode, and other agent hosts is welcome
-through focused host adapters.
+TreeWork for Coding Agents currently ships and is release-tested for Codex.
+Support for Claude Code, Cursor, Gemini CLI, OpenCode, and other agent hosts is
+welcome through focused host adapters. TreeWork Manual can be loaded by hosts
+that support standalone Agent Skills.
 
 High-impact contribution areas include:
 
@@ -318,11 +302,11 @@ make validate
 
 ## Status
 
-`v0.1.7` is the current runtime version. Alignment, declarative Tree
+`v0.1.7` is the current Coding Agents edition version. Alignment, declarative Tree
 construction, hierarchy-aligned branch documents, protected branch traversal,
-Recall, Project Map, and Replay form a usable end-to-end loop. Codex and Pi host
-surfaces share those semantics. Project Map interaction design will continue to
-evolve.
+Recall, Project Map, and Replay form a usable end-to-end loop. TreeWork Manual
+is released independently from the same repository and tag. Project Map
+interaction design will continue to evolve.
 
 ## Privacy
 

@@ -1,7 +1,7 @@
 # TreeWork Repository Guidance
 
-This repository contains an installable Codex plugin, a focused Pi package
-adapter, and the shared source used to maintain both.
+This repository contains two independently installable TreeWork editions and
+the source used to maintain them.
 
 ## Read Before Editing
 
@@ -16,14 +16,11 @@ adapter, and the shared source used to maintain both.
 
 ## Repository Boundaries
 
-- `plugins/treework/` is the installable Codex plugin and shared runtime. Keep
+- `plugins/treework/` is the installable Coding Agents edition. Keep
   it free of project history, UI source, prototypes, and maintainer-only
   documents.
-- `adapters/pi/` is the focused Pi host surface. Reuse the shared Skill, CLI,
-  transactions, and MCP server; do not fork their state or semantics.
-- `skills/treework-manual/` is the standalone manual variant. Keep its working
-  contract in one `SKILL.md` and do not make it depend on the CLI, hooks,
-  schemas, Git worktrees, fixed coding stages, or Project Map.
+- `skills/treework-manual/` is the independently installable Manual edition.
+  Keep its complete working contract in one self-contained `SKILL.md`.
 - Agent references explain how to use TreeWork. Do not put Rust modules, API
   internals, migration plans, or frontend architecture there.
 - `project-map-ui/` is source; `plugins/treework/assets/graph-panel/`
