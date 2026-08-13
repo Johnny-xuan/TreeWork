@@ -282,8 +282,9 @@ reality, durable knowledge, and next viable movement.
 
 - Do not duplicate information across root and branch documents. Promote only
   information whose effect crosses branch boundaries.
-- Do not let document upkeep become the work. Keep every file concise enough to
-  recover direction quickly.
+- Do not maintain documents as ceremony. Their purpose is to preserve the
+  work's current state, the Agent's project understanding, and the context
+  needed for later work to recover direction and continue correctly.
 - Do not invent extra process, files, or bookkeeping merely to make the Tree
   look complete. Add structure only when it improves orientation or recovery.
 - Treat an existing `.TreeWork/` as user data. If its structure differs from
