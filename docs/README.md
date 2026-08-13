@@ -21,12 +21,6 @@ The installed Skill owns workflow guidance:
 These files live under
 `plugins/treework/skills/treework/references/`.
 
-## Host Adapters
-
-- [TreeWork for Pi](../adapters/pi/README.md) defines Pi installation, lazy
-  tools, lifecycle guardrails, cwd-bound conversation handoff, verification,
-  and rollback.
-
 ## Product Maintainers
 
 - [Project Map](product/project-map.md) defines Map, Dependency, Replay,

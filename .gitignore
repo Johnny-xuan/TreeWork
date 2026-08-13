@@ -18,5 +18,3 @@ prototypes/
 /PAPER_REVIEW.md
 /publish/
 *.tmp
-
-/package-lock.json

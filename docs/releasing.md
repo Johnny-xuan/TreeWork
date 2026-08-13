@@ -4,7 +4,6 @@
 
 1. Update the version in:
    - `plugins/treework/.codex-plugin/plugin.json`
-   - `package.json` (Pi package; validation requires the same version)
    - `plugins/treework/crates/treework-cli/Cargo.toml`
    - `plugins/treework/Cargo.lock`
    - `project-map-ui/package.json`
@@ -40,15 +39,6 @@ version:
 
 ```bash
 python3 scripts/check_activation.py
-```
-
-Install the repository as a local Pi package in an isolated or disposable Pi
-agent directory, verify `/treework-adapter`, then remove it again. The automated
-package-load and rollback check plus the real offline session round-trip are:
-
-```bash
-TREEWORK_REQUIRE_PI=1 python3 scripts/check_pi_adapter.py
-TREEWORK_REQUIRE_PI=1 python3 scripts/check_pi_workspace_switch.py
 ```
 
 ## Publish

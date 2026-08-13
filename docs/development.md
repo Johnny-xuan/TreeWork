@@ -2,11 +2,9 @@
 
 ## Layout
 
-The installable Codex plugin and shared TreeWork runtime are under
-`plugins/treework/`. The focused Pi package is declared by the root
-`package.json` and implemented under `adapters/pi/`; it reuses the shared Skill
-and MCP server rather than copying them. Project Map TypeScript source,
-repository tests, and maintainer documents remain outside the plugin.
+The installable plugin is `plugins/treework/`. Runtime source and
+bundled assets stay inside that directory. Project Map TypeScript source,
+repository tests, and maintainer documents remain outside it.
 
 ## Rust Runtime
 
@@ -50,9 +48,7 @@ python3 scripts/measure_project_map_performance.py --mode verify \
 python3 scripts/stress_project_map.py --branches 750 --relations 1500
 ```
 
-## Host Surfaces
-
-Codex plugin checks:
+## Plugin Surfaces
 
 ```bash
 python3 scripts/check_hooks.py
@@ -60,22 +56,6 @@ python3 scripts/check_mcp.py
 python3 scripts/check_packaging.py
 python3 scripts/test_check_activation.py
 ```
-
-Pi adapter checks require Node.js 22+. The Pi executable is optional locally;
-set `TREEWORK_REQUIRE_PI=1` to make its absence fail as it does in CI.
-
-```bash
-node --test adapters/pi/tests/*.test.mjs
-python3 scripts/check_pi_adapter.py
-python3 scripts/check_pi_workspace_switch.py
-```
-
-The round-trip test initializes a temporary TreeWork repository and drives Pi
-from a repository subdirectory in offline RPC mode. It exercises the deferred
-Enter command, real managed-worktree switch, and Return command; verifies that
-history and the parent-session chain survive; and proves a switch cancelled by
-another extension recovers the entered branch to `paused` without leaving an
-orphan Pi session.
 
 Plugin and Skill schema validation requires PyYAML:
 

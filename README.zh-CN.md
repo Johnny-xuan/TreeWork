@@ -10,9 +10,9 @@
 
 # TreeWork
 
-TreeWork 是一套面向 Coding Agent 的**树引导开发系统**，同时提供 Codex 插件
-和聚焦的 Pi host adapter。它帮助 Agent 把复杂项目组织成一棵 branch 树，在
-编码前完成重要设计，并在长期开发中沿着树移动而不失去方向。
+TreeWork 是一个面向 Codex 的**树引导开发插件**。它帮助 Coding Agent 把复杂
+项目组织成一棵 branch 树，在编码前完成重要设计，并在长期开发中沿着树移动而
+不失去方向。
 
 代码检查能够看到已经实现了什么，检索型记忆能够找回历史片段，但两者都不能
 稳定回答项目已经接受了什么、工作进行到哪里，以及上一个 Agent 为什么停下。
@@ -21,28 +21,11 @@ TreeWork 将已接受的项目结构、branch 状态、Spec、进度、结论和
 
 ## 首次安装
 
-TreeWork 当前面向 macOS 和 Linux 上的 Codex 与 Pi。原生 Windows 支持尚未
-经过发布测试。
+TreeWork 当前面向 macOS 和 Linux 上的 Codex。原生 Windows 支持尚未经过发布
+测试。
 
 运行依赖包括 Git、Bash、Python 3、Rust 和 Cargo。Project Map 前端已经打包；
 只有开发前端时才需要 Node.js。
-
-### Pi
-
-直接从本仓库安装 Pi package：
-
-```bash
-pi install git:github.com/Johnny-xuan/TreeWork
-```
-
-重启 Pi，运行 `/treework-adapter` 验证运行时，然后执行 `/skill:treework` 或直接
-要求 Pi 使用 TreeWork。适配器直接复用仓库中的 Skill 和 MCP 服务，按需加载只读
-工具，移植 TreeWork 的写保护与 stop check，并通过显式的 `/treework-enter` 与
-`/treework-return` 命令 fork cwd 绑定的 Pi 会话，把完整对话移入或移出 branch
-worktree。完整安装、使用、验证与回滚方式见
-[TreeWork for Pi](adapters/pi/README.md)。
-
-### Codex 引导安装
 
 把下面这段 prompt 直接交给一个能够使用终端的 Codex Agent：
 
@@ -76,7 +59,7 @@ TreeWork。
    后，再进行项目初始化。
 ```
 
-### Codex 手动安装
+### 手动安装
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -174,9 +157,8 @@ TreeWork 包含一个本地只读 Project Map：
 - **Dependency** 展示某个 branch 的前置依赖和下游工作；
 - **Replay** 按时间重建已接受的 TreeWork 状态转移。
 
-第一个 Tree 被接受后，Agent 使用当前 host adapter 提供的 Project Map 交接。
-Codex 会在内置浏览器中打开本地 URL；Pi 返回该 URL，只有在明确请求时才打开系统
-浏览器。面板只投影已接受状态，不直接编辑项目。
+第一个 Tree 被接受后，Agent 会在 Codex 内置浏览器中打开 Project Map。面板只
+投影已接受状态，不直接编辑项目。
 
 ## 设计理由
 
@@ -206,7 +188,8 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 
 ## 插件内容
 
-可安装的 Codex 插件位于 [`plugins/treework`](plugins/treework)，其中包括：
+可安装插件位于 [`plugins/treework`](plugins/treework)，
+其中包括：
 
 - 分阶段项目状态 Skill 及面向 Agent 的参考文档；
 - Rust 编写的 `tw` 事务运行时；
@@ -214,15 +197,12 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 - 用于 Recall 和启动 Project Map 的本地只读 MCP 服务；
 - 已打包的 Project Map 资源。
 
-Pi package manifest 和聚焦的扩展位于 [`adapters/pi`](adapters/pi)，并直接复用
-同一份 Skill、运行时和 MCP 服务。TreeWork 将项目状态保存在 `.TreeWork/` 下；
-两个 host adapter 都不会创建第二事实源。
+TreeWork 将项目状态保存在 `.TreeWork/` 下。
 
 ## 仓库结构
 
 ```text
-plugins/treework/              可安装的 Codex 插件及共享运行时
-adapters/pi/                  聚焦的 Pi 扩展、测试与 host 文档
+plugins/treework/              可安装的 Codex 插件
 project-map-ui/               React/D3/SVG Project Map 源码
 docs/product/                 产品行为和交互契约
 docs/architecture/            运行时和 transaction 契约
@@ -235,8 +215,9 @@ paper/                        研究论文源码与图片
 
 ## 社区参与
 
-TreeWork 目前为 Codex 和 Pi 提供发布测试支持。欢迎贡献者通过聚焦的 host
-adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等 Agent host 增加支持。
+TreeWork 目前以 Codex 插件形式提供，并以 Codex 作为发布测试目标。欢迎贡献者
+通过聚焦的 host adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等
+Agent host 增加支持。
 
 当前特别需要贡献者参与的方向包括：
 
@@ -265,10 +246,9 @@ make validate
 
 ## 当前状态
 
-`v0.1.7` 是当前运行时版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
-branch 文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成
-可用的端到端闭环，Codex 与 Pi host surface 共享这些语义。Project Map 的交互
-设计仍会持续演化。
+`v0.1.7` 是当前版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的 branch
+文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成可用的
+端到端闭环。Project Map 的交互设计仍会持续演化。
 
 ## 隐私
 
