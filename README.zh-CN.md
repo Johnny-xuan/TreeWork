@@ -47,6 +47,17 @@ host 的 Skills 目录。对于 Codex，安装到 `$CODEX_HOME/skills/`（通常
 TreeWork for Coding Agents 当前面向 macOS 和 Linux 上的 Codex。原生 Windows
 支持尚未经过发布测试。
 
+对应的 GitHub Release 同时提供 `TreeWork-Coding-Agents-vX.Y.Z.zip`。解压后，
+`treework-coding-agents/` 目录就是一个自包含的本地 Codex marketplace：
+
+```bash
+codex plugin marketplace add /path/to/treework-coding-agents
+codex plugin add treework@treework
+```
+
+如果能够正常访问 GitHub，更推荐使用下面的 Git marketplace 安装方式，因为 Codex
+可以直接从仓库更新。
+
 运行依赖包括 Git、Bash、Python 3、Rust 和 Cargo。Project Map 前端已经打包；
 只有开发前端时才需要 Node.js。
 
@@ -274,7 +285,7 @@ make validate
 
 ## 当前状态
 
-`v0.1.7` 是当前 Coding Agents 版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
+`v0.1.8` 是当前 Coding Agents 版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
 branch 文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成
 可用的端到端闭环。TreeWork Manual 从同一仓库和 tag 独立发布。Project Map 的
 交互设计仍会持续演化。

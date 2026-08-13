@@ -53,6 +53,18 @@ The same independently installable source is available at
 TreeWork for Coding Agents currently targets Codex on macOS and Linux. Native
 Windows support has not been release-tested.
 
+The matching GitHub Release also provides
+`TreeWork-Coding-Agents-vX.Y.Z.zip`. After extracting it, the
+`treework-coding-agents/` directory is a self-contained local Codex marketplace:
+
+```bash
+codex plugin marketplace add /path/to/treework-coding-agents
+codex plugin add treework@treework
+```
+
+The Git marketplace installation below is recommended when normal GitHub access
+is available because Codex can update it directly from the repository.
+
 Runtime prerequisites: Git, Bash, Python 3, Rust, and Cargo. The Project Map
 frontend is bundled; Node.js is needed only for frontend development.
 
@@ -302,7 +314,7 @@ make validate
 
 ## Status
 
-`v0.1.7` is the current Coding Agents edition version. Alignment, declarative Tree
+`v0.1.8` is the current Coding Agents edition version. Alignment, declarative Tree
 construction, hierarchy-aligned branch documents, protected branch traversal,
 Recall, Project Map, and Replay form a usable end-to-end loop. TreeWork Manual
 is released independently from the same repository and tag. Project Map

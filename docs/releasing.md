@@ -24,10 +24,10 @@ make package
 Packaging produces three local forms:
 
 - `dist/treework/` is the unpacked Coding Agents plugin candidate;
-- `dist/releases/TreeWork-Coding-Agents-vX.Y.Z.zip` is the independently
-  installable Coding Agents release asset;
+- `dist/releases/TreeWork-Coding-Agents-vX.Y.Z.zip` contains a self-contained
+  local Codex marketplace rooted at `treework-coding-agents/`;
 - `dist/releases/TreeWork-Manual-vX.Y.Z.zip` is the independently installable
-  single-file Manual release asset.
+  single-file Manual release asset rooted at `treework-manual/`.
 
 Both ZIP assets come from the same committed `HEAD` and share the release tag,
 but users install them independently.

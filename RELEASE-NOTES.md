@@ -1,6 +1,6 @@
 # Release Notes
 
-## Unreleased
+## v0.1.8 - Two Independent Editions
 
 - Adds `treework-manual`, an independently installable single-file TreeWork
   edition for writing, research, notes, planning, creative work, operations,

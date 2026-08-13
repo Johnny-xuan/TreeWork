@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import stat
 import subprocess
@@ -20,16 +21,26 @@ from _paths import REPOSITORY_ROOT
 RELEASE_ROOT = REPOSITORY_ROOT / "dist" / "releases"
 EDITIONS = {
     "Coding-Agents": {
-        "source": Path("plugins/treework"),
-        "directory": "treework",
+        "sources": [
+            (Path("plugins/treework"), Path("plugins/treework")),
+        ],
+        "files": [
+            (
+                Path(".agents/plugins/marketplace.json"),
+                Path(".agents/plugins/marketplace.json"),
+            ),
+        ],
+        "directory": "treework-coding-agents",
         "required": {
-            ".codex-plugin/plugin.json",
-            ".mcp.json",
-            "skills/treework/SKILL.md",
+            ".agents/plugins/marketplace.json",
+            "plugins/treework/.codex-plugin/plugin.json",
+            "plugins/treework/.mcp.json",
+            "plugins/treework/skills/treework/SKILL.md",
         },
     },
     "Manual": {
-        "source": Path("skills/treework-manual"),
+        "sources": [(Path("skills/treework-manual"), Path("."))],
+        "files": [],
         "directory": "treework-manual",
         "required": {"SKILL.md"},
     },
@@ -52,10 +63,30 @@ def git_bytes(*args: str) -> bytes:
     return result.stdout
 
 
-def source_version(commit: str) -> str:
-    raw = git_bytes(
-        "show", f"{commit}:plugins/treework/.codex-plugin/plugin.json"
+def committed_file(commit: str, path: Path) -> bytes:
+    return git_bytes("show", f"{commit}:{path.as_posix()}")
+
+
+def toml_package_version(raw: bytes, name: str) -> str | None:
+    package = raw.decode().split("[package]", 1)
+    if len(package) != 2:
+        return None
+    match = re.search(r'^version\s*=\s*"([^"]+)"', package[1], re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def lock_package_version(raw: bytes, package_name: str) -> str | None:
+    pattern = re.compile(
+        rf'\[\[package\]\]\s+name\s*=\s*"{re.escape(package_name)}"\s+'
+        r'version\s*=\s*"([^"]+)"',
+        re.MULTILINE,
     )
+    matches = pattern.findall(raw.decode())
+    return matches[0] if len(matches) == 1 else None
+
+
+def source_version(commit: str) -> str:
+    raw = committed_file(commit, Path("plugins/treework/.codex-plugin/plugin.json"))
     try:
         manifest = json.loads(raw)
         version = manifest["version"]
@@ -63,6 +94,30 @@ def source_version(commit: str) -> str:
         raise SystemExit("committed plugin manifest has no valid version") from error
     if not isinstance(version, str) or not version:
         raise SystemExit("committed plugin version must be a non-empty string")
+
+    versions = {
+        "plugin manifest": version,
+        "treework-cli": toml_package_version(
+            committed_file(
+                commit, Path("plugins/treework/crates/treework-cli/Cargo.toml")
+            ),
+            "treework-cli",
+        ),
+        "Cargo.lock treework-cli": lock_package_version(
+            committed_file(commit, Path("plugins/treework/Cargo.lock")),
+            "treework-cli",
+        ),
+        "Project Map": json.loads(
+            committed_file(commit, Path("project-map-ui/package.json"))
+        ).get("version"),
+    }
+    mismatched = {
+        name: value for name, value in versions.items() if value != version
+    }
+    if mismatched:
+        raise SystemExit(
+            f"committed release versions do not match {version}: {mismatched}"
+        )
     return version
 
 
@@ -147,6 +202,23 @@ def validate_edition(name: str, root: Path, required: set[str]) -> None:
         )
 
 
+def build_candidate(
+    commit: str,
+    candidate: Path,
+    sources: list[tuple[Path, Path]],
+    files: list[tuple[Path, Path]],
+) -> None:
+    candidate.mkdir()
+    for source, relative_destination in sources:
+        destination = candidate / relative_destination
+        destination.mkdir(parents=True, exist_ok=True)
+        extract_commit_path(commit, source, destination)
+    for source, relative_destination in files:
+        destination = candidate / relative_destination
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(committed_file(commit, source))
+
+
 def zip_info(name: str, mode: int) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.create_system = 3
@@ -211,7 +283,7 @@ def main() -> None:
         raise SystemExit("run package_release_assets.py from the TreeWork repository")
     commit = git_bytes("rev-parse", "HEAD").decode().strip()
     version = source_version(commit)
-    license_bytes = git_bytes("show", f"{commit}:LICENSE")
+    license_bytes = committed_file(commit, Path("LICENSE"))
     expected_tag = f"v{version}"
     if args.tag and args.tag != expected_tag:
         raise SystemExit(
@@ -230,11 +302,15 @@ def main() -> None:
         for name, config in EDITIONS.items():
             directory = str(config["directory"])
             candidate = temporary_root / directory
-            candidate.mkdir()
-            extract_commit_path(commit, config["source"], candidate)
+            build_candidate(
+                commit,
+                candidate,
+                config["sources"],
+                config["files"],
+            )
             validate_edition(name, candidate, config["required"])
             archive_path = RELEASE_ROOT / f"TreeWork-{name}-v{version}.zip"
-            extras = {"LICENSE": license_bytes} if name == "Manual" else None
+            extras = {"LICENSE": license_bytes}
             write_reproducible_zip(candidate, archive_path, extras)
             verify_zip(archive_path, directory, candidate, extras)
             built.append(archive_path)
