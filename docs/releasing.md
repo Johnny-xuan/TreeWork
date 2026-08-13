@@ -18,12 +18,19 @@
 Packaging reads tracked bytes from `HEAD`, not the mutable worktree:
 
 ```bash
-python3 scripts/package_plugin.py
-python3 scripts/check_package_commit_source.py
+make package
 ```
 
-The clean package appears at `dist/treework/`. It contains only the
-tracked installable plugin subtree.
+Packaging produces three local forms:
+
+- `dist/treework/` is the unpacked Coding Agents plugin candidate;
+- `dist/releases/TreeWork-Coding-Agents-vX.Y.Z.zip` contains a self-contained
+  local Codex marketplace rooted at `treework-coding-agents/`;
+- `dist/releases/TreeWork-Manual-vX.Y.Z.zip` is the independently installable
+  single-file Manual release asset rooted at `treework-manual/`.
+
+Both ZIP assets come from the same committed `HEAD` and share the release tag,
+but users install them independently.
 
 ## Install the Candidate
 
@@ -51,6 +58,7 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-Create a GitHub release from the matching section of `RELEASE-NOTES.md`. Do not
-move an existing release tag. Do not publish from a dirty worktree or from
+The tag workflow validates that `vX.Y.Z` matches the committed plugin version,
+creates one GitHub Release, and uploads both edition ZIPs together. Do not move
+an existing release tag. Do not publish from a dirty worktree or from
 uncommitted `dist/` contents.

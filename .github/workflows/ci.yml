@@ -59,3 +59,4 @@ jobs:
           python scripts/test_check_activation.py
           python scripts/test_macos_quarantine_bootstrap.py
           python scripts/check_packaging.py
+          python scripts/package_release_assets.py

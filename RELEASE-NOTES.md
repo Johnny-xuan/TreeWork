@@ -1,10 +1,15 @@
 # Release Notes
 
-## Unreleased
+## v0.1.8 - Two Independent Editions
 
-- Withdraws the experimental Pi host adapter, its root package manifest,
-  Pi-specific host commands, and adapter validation. The Codex plugin and the
-  persisted TreeWork project-state format are unchanged.
+- Adds `treework-manual`, an independently installable single-file TreeWork
+  edition for writing, research, notes, planning, creative work, operations,
+  and other evolving projects. Agents maintain its Tree and project state
+  directly in Markdown.
+- Publishes TreeWork for Coding Agents and TreeWork Manual as two independently
+  installable assets from the same release tag.
+- Withdraws the experimental Pi host adapter. The Codex plugin and persisted
+  TreeWork project-state format are unchanged.
 
 ## v0.1.7 - Hierarchical Branch Artifacts
 

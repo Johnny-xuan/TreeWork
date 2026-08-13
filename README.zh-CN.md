@@ -10,22 +10,58 @@
 
 # TreeWork
 
-TreeWork 是一个面向 Codex 的**树引导开发插件**。它帮助 Coding Agent 把复杂
-项目组织成一棵 branch 树，在编码前完成重要设计，并在长期开发中沿着树移动而
-不失去方向。
+TreeWork 是一种面向 Agent 的**树引导工作模型**。它把持续演化的工作外化成一棵
+持久的 Tree，让每条工作线归属一个 branch，并让 Agent 从根进入 branch、完成
+局部工作后返回根，而不是把不断到来的请求当成一条扁平队列。Plan、Progress 和
+Findings 让每个位置在中断、上下文重置或 Agent 交接后仍然可以恢复。
 
-代码检查能够看到已经实现了什么，检索型记忆能够找回历史片段，但两者都不能
-稳定回答项目已经接受了什么、工作进行到哪里，以及上一个 Agent 为什么停下。
-TreeWork 将已接受的项目结构、branch 状态、Spec、进度、结论和验证记录保存在
-模型上下文之外，让长期任务不必每次从头重建项目就能继续。
+本仓库提供两个可以独立安装的版本。它们共享从根到 branch 的工作心智模型，
+但各自拥有独立的状态模型和运行契约。
 
-## 首次安装
+## TreeWork 版本
 
-TreeWork 当前面向 macOS 和 Linux 上的 Codex。原生 Windows 支持尚未经过发布
-测试。
+- **TreeWork for Coding Agents** 是带运行时的开发系统。它通过 Codex 插件提供
+  Alignment、Spec、声明式 Tree transaction、隔离 Git worktree、
+  completion 保护、Recall 和 Project Map。
+- **[TreeWork Manual](skills/treework-manual/SKILL.md)** 是一份独立、单文件的
+  Agent Skill，适用于写作、研究、笔记、规划、创作、运营及其他持续演化的工作。
+  Agent 直接在 Markdown 中维护 Tree 与项目状态。
+
+根据用户需要和实际工作选择版本，不要把其中一个视为另一个的 fallback。同一个
+项目不能在没有显式迁移的情况下混用两套状态模型。
+
+## 安装
+
+### TreeWork Manual
+
+从对应的 [GitHub Release](https://github.com/Johnny-xuan/TreeWork/releases)
+下载 `TreeWork-Manual-vX.Y.Z.zip`，将其中的 `treework-manual/` 目录解压到 Agent
+host 的 Skills 目录。对于 Codex，安装到 `$CODEX_HOME/skills/`（通常为
+`~/.codex/skills/`），然后新建一个任务。这个包是独立完整的，只包含一份
+`SKILL.md`；ZIP 根目录同时包含 MIT License。
+
+同一份可独立安装的源码位于 [`skills/treework-manual`](skills/treework-manual)。
+
+### TreeWork for Coding Agents
+
+TreeWork for Coding Agents 当前面向 macOS 和 Linux 上的 Codex。原生 Windows
+支持尚未经过发布测试。
+
+对应的 GitHub Release 同时提供 `TreeWork-Coding-Agents-vX.Y.Z.zip`。解压后，
+`treework-coding-agents/` 目录就是一个自包含的本地 Codex marketplace：
+
+```bash
+codex plugin marketplace add /path/to/treework-coding-agents
+codex plugin add treework@treework
+```
+
+如果能够正常访问 GitHub，更推荐使用下面的 Git marketplace 安装方式，因为 Codex
+可以直接从仓库更新。
 
 运行依赖包括 Git、Bash、Python 3、Rust 和 Cargo。Project Map 前端已经打包；
 只有开发前端时才需要 Node.js。
+
+#### Codex 引导安装
 
 把下面这段 prompt 直接交给一个能够使用终端的 Codex Agent：
 
@@ -59,7 +95,7 @@ TreeWork。
    后，再进行项目初始化。
 ```
 
-### 手动安装
+#### Codex 手动安装
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -188,8 +224,7 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 
 ## 插件内容
 
-可安装插件位于 [`plugins/treework`](plugins/treework)，
-其中包括：
+可安装的 Codex 插件位于 [`plugins/treework`](plugins/treework)，其中包括：
 
 - 分阶段项目状态 Skill 及面向 Agent 的参考文档；
 - Rust 编写的 `tw` 事务运行时；
@@ -197,12 +232,16 @@ Agent 在其中移动的有效方式，同时把局部实现决策留给 Agent�
 - 用于 Recall 和启动 Project Map 的本地只读 MCP 服务；
 - 已打包的 Project Map 资源。
 
-TreeWork 将项目状态保存在 `.TreeWork/` 下。
+TreeWork for Coding Agents 将项目状态保存在 `.TreeWork/` 下。
+
+可独立安装的 [`skills/treework-manual`](skills/treework-manual) 版本只包含一份
+自包含的 Agent Skill。
 
 ## 仓库结构
 
 ```text
-plugins/treework/              可安装的 Codex 插件
+plugins/treework/              TreeWork for Coding Agents Codex 插件
+skills/treework-manual/       独立的手动 TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map 源码
 docs/product/                 产品行为和交互契约
 docs/architecture/            运行时和 transaction 契约
@@ -215,9 +254,9 @@ paper/                        研究论文源码与图片
 
 ## 社区参与
 
-TreeWork 目前以 Codex 插件形式提供，并以 Codex 作为发布测试目标。欢迎贡献者
-通过聚焦的 host adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等
-Agent host 增加支持。
+TreeWork for Coding Agents 目前以 Codex 作为发布测试目标。欢迎贡献者通过聚焦的
+host adapter，为 Claude Code、Cursor、Gemini CLI、OpenCode 等 Agent host
+增加支持。支持独立 Agent Skills 的 host 可以直接加载 TreeWork Manual。
 
 当前特别需要贡献者参与的方向包括：
 
@@ -246,9 +285,10 @@ make validate
 
 ## 当前状态
 
-`v0.1.7` 是当前版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的 branch
-文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成可用的
-端到端闭环。Project Map 的交互设计仍会持续演化。
+`v0.1.8` 是当前 Coding Agents 版本。Alignment、声明式 Tree 构建、与 Tree 层级一致的
+branch 文档、受保护的 branch 移动、Recall、Project Map 和 Replay 已经形成
+可用的端到端闭环。TreeWork Manual 从同一仓库和 tag 独立发布。Project Map 的
+交互设计仍会持续演化。
 
 ## 隐私
 

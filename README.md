@@ -10,24 +10,65 @@
 
 # TreeWork
 
-TreeWork is a **tree-guided development plugin for Codex**. It helps coding
-agents organize complex projects as branches, prepare the important design
-before coding, and move through long-running work without losing direction.
+TreeWork is a **tree-guided working model for Agents**. It externalizes evolving
+work as a persistent Tree, gives every line of effort a branch, and teaches an
+Agent to move from the root into one branch and back instead of chasing requests
+as a flat queue. Plans, progress, and findings keep each location recoverable
+across interruptions, context resets, and handoffs.
 
-Code inspection shows what exists and retrieval memory recalls fragments, but
-neither reliably tells an Agent what the project has accepted, where work
-stands, or why it stopped. TreeWork therefore keeps the accepted project
-structure, branch state, Specs, progress, findings, and verification outside
-the model context so work can resume without reconstructing the project from
-scratch.
+This repository provides two independently installable editions. They share the
+same root-to-branch mental model, but each defines its own state and operating
+contract.
 
-## First Install
+## TreeWork Editions
 
-TreeWork currently targets Codex on macOS and Linux. Native Windows support has
-not been release-tested.
+- **TreeWork for Coding Agents** is a runtime-backed development system. It adds
+  Alignment, Specs, declarative Tree transactions, isolated Git worktrees,
+  protected completion, Recall, and Project Map through the Codex plugin.
+- **[TreeWork Manual](skills/treework-manual/SKILL.md)** is a standalone,
+  single-file Agent Skill for writing, research, notes, planning, creative work,
+  operations, and other evolving work. The Agent maintains the Tree and its
+  project state directly in Markdown.
+
+Choose an edition from the user's needs and the actual work rather than treating
+one as a fallback for the other. Do not combine both state models inside one
+project without an explicit migration.
+
+## Installation
+
+### TreeWork Manual
+
+Download `TreeWork-Manual-vX.Y.Z.zip` from the matching
+[GitHub Release](https://github.com/Johnny-xuan/TreeWork/releases), then extract
+its `treework-manual/` directory into the Skills directory used by your Agent
+host. For Codex, install it under `$CODEX_HOME/skills/` (normally
+`~/.codex/skills/`) and start a new task. The package is self-contained and
+contains one `SKILL.md`; the ZIP root also carries the MIT license.
+
+The same independently installable source is available at
+[`skills/treework-manual`](skills/treework-manual).
+
+### TreeWork For Coding Agents
+
+TreeWork for Coding Agents currently targets Codex on macOS and Linux. Native
+Windows support has not been release-tested.
+
+The matching GitHub Release also provides
+`TreeWork-Coding-Agents-vX.Y.Z.zip`. After extracting it, the
+`treework-coding-agents/` directory is a self-contained local Codex marketplace:
+
+```bash
+codex plugin marketplace add /path/to/treework-coding-agents
+codex plugin add treework@treework
+```
+
+The Git marketplace installation below is recommended when normal GitHub access
+is available because Codex can update it directly from the repository.
 
 Runtime prerequisites: Git, Bash, Python 3, Rust, and Cargo. The Project Map
 frontend is bundled; Node.js is needed only for frontend development.
+
+#### Codex guided install
 
 Give the following prompt to a Codex Agent with terminal access:
 
@@ -67,7 +108,7 @@ inside the current project until I explicitly approve it.
    new one. Leave project initialization to the new Codex task after I choose.
 ```
 
-### Manual Install
+#### Codex manual install
 
 ```bash
 codex plugin marketplace add https://github.com/Johnny-xuan/TreeWork
@@ -204,7 +245,7 @@ Read the formal model and evaluation design in the
 
 ## Package Contents
 
-The installable plugin lives at
+The installable Codex plugin lives at
 [`plugins/treework`](plugins/treework) and includes:
 
 - the staged project-state Skill and Agent-facing references;
@@ -213,12 +254,16 @@ The installable plugin lives at
 - a local read-only MCP server for Recall and Project Map launch;
 - bundled Project Map assets.
 
-TreeWork stores project state under `.TreeWork/`.
+TreeWork for Coding Agents stores project state under `.TreeWork/`.
+
+The independently installable [`skills/treework-manual`](skills/treework-manual)
+edition contains one self-contained Agent Skill.
 
 ## Repository Layout
 
 ```text
-plugins/treework/              Installable Codex plugin
+plugins/treework/              TreeWork for Coding Agents Codex plugin
+skills/treework-manual/       Standalone manual TreeWork Skill
 project-map-ui/               React/D3/SVG Project Map source
 docs/product/                 Product behavior and UX contracts
 docs/architecture/            Runtime and transaction contracts
@@ -231,9 +276,10 @@ while using TreeWork. Maintainer implementation contracts stay under `docs/`.
 
 ## Community and Help Wanted
 
-TreeWork currently ships and is release-tested as a Codex plugin. Support for
-Claude Code, Cursor, Gemini CLI, OpenCode, and other agent hosts is welcome
-through focused host adapters.
+TreeWork for Coding Agents currently ships and is release-tested for Codex.
+Support for Claude Code, Cursor, Gemini CLI, OpenCode, and other agent hosts is
+welcome through focused host adapters. TreeWork Manual can be loaded by hosts
+that support standalone Agent Skills.
 
 High-impact contribution areas include:
 
@@ -268,10 +314,11 @@ make validate
 
 ## Status
 
-`v0.1.7` is the current version. Alignment, declarative Tree construction,
-hierarchy-aligned branch documents, protected branch traversal, Recall, Project
-Map, and Replay form a usable end-to-end loop. Project Map interaction design
-will continue to evolve.
+`v0.1.8` is the current Coding Agents edition version. Alignment, declarative Tree
+construction, hierarchy-aligned branch documents, protected branch traversal,
+Recall, Project Map, and Replay form a usable end-to-end loop. TreeWork Manual
+is released independently from the same repository and tag. Project Map
+interaction design will continue to evolve.
 
 ## Privacy
 

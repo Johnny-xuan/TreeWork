@@ -1,7 +1,7 @@
 # TreeWork Repository Guidance
 
-This repository contains both an installable Codex plugin and the source used
-to maintain it.
+This repository contains two independently installable TreeWork editions and
+the source used to maintain them.
 
 ## Read Before Editing
 
@@ -16,8 +16,11 @@ to maintain it.
 
 ## Repository Boundaries
 
-- `plugins/treework/` is the installable plugin. Keep it free of
-  project history, UI source, prototypes, and maintainer-only documents.
+- `plugins/treework/` is the installable Coding Agents edition. Keep
+  it free of project history, UI source, prototypes, and maintainer-only
+  documents.
+- `skills/treework-manual/` is the independently installable Manual edition.
+  Keep its complete working contract in one self-contained `SKILL.md`.
 - Agent references explain how to use TreeWork. Do not put Rust modules, API
   internals, migration plans, or frontend architecture there.
 - `project-map-ui/` is source; `plugins/treework/assets/graph-panel/`

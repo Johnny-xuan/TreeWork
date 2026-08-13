@@ -32,10 +32,13 @@ validate: build-ui
 	python3 $(PLUGIN_CREATOR)/scripts/validate_plugin.py $(PLUGIN)
 	python3 $(SKILL_CREATOR)/scripts/quick_validate.py \
 		$(PLUGIN)/skills/treework
+	python3 $(SKILL_CREATOR)/scripts/quick_validate.py \
+		skills/treework-manual
 
 package:
 	python3 scripts/package_plugin.py
 	python3 scripts/check_package_commit_source.py
+	python3 scripts/package_release_assets.py
 
 browser-test:
 	mkdir -p $(ARTIFACTS)
